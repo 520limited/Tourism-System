@@ -80,9 +80,9 @@ export const planAPI = {
 }
 
 export const tripAPI = {
+  getTrips: (params) => api.get('/trips', { params }),
+  getTrip: (id) => api.get(`/trips/${id}`),
   create: (data) => api.post('/trips', data),
-  getById: (id) => api.get(`/trips/${id}`),
-  getUserTrips: (params) => api.get('/trips', { params }),
   update: (id, data) => api.put(`/trips/${id}`, data),
   delete: (id) => api.delete(`/trips/${id}`),
   favorite: (id, isFavorite) => api.post(`/trips/${id}/favorite`, { isFavorite }),

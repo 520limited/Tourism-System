@@ -3,3 +3,5 @@
 /server/node_modules
 /dist
 /server/logs
+# Ignore logs folder
+logs/
