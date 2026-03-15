@@ -166,7 +166,7 @@ const loadTripData = async () => {
 
   loading.value = true
   try {
-    const res = await tripAPI.getById(tripId)
+    const res = await tripAPI.getTrip(tripId)
     if (res.code === 200 && res.data) {
       tripData.value = res.data
     } else {

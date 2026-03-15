@@ -102,53 +102,77 @@ class TripService {
 
   async getUserTrips(userId, filters = {}) {
     try {
+      let countSql = 'SELECT COUNT(*) as total FROM trips WHERE 1=1';
       let sql = 'SELECT * FROM trips WHERE 1=1';
       const params = [];
+      const countParams = [];
 
       if (userId) {
         sql += ' AND user_id = ?';
+        countSql += ' AND user_id = ?';
         params.push(userId);
+        countParams.push(userId);
       } else {
         sql += ' AND user_id IS NULL';
+        countSql += ' AND user_id IS NULL';
       }
 
       if (filters.status) {
         sql += ' AND status = ?';
+        countSql += ' AND status = ?';
         params.push(filters.status);
+        countParams.push(filters.status);
       }
 
       if (filters.days) {
         sql += ' AND JSON_EXTRACT(requirements, "$.days") = ?';
+        countSql += ' AND JSON_EXTRACT(requirements, "$.days") = ?';
         params.push(parseInt(filters.days));
+        countParams.push(parseInt(filters.days));
       }
 
       if (filters.keyword) {
         sql += ' AND title LIKE ?';
+        countSql += ' AND title LIKE ?';
         params.push(`%${filters.keyword}%`);
+        countParams.push(`%${filters.keyword}%`);
       }
 
       if (filters.isFavorite !== undefined) {
         sql += ' AND is_favorite = ?';
+        countSql += ' AND is_favorite = ?';
         params.push(filters.isFavorite ? 1 : 0);
+        countParams.push(filters.isFavorite ? 1 : 0);
       }
 
       sql += ' ORDER BY updated_at DESC';
 
-      const trips = await dbAll(sql, params);
+      const page = parseInt(filters.page) || 1;
+      const pageSize = parseInt(filters.pageSize) || 12;
+      const offset = (page - 1) * pageSize;
+      sql += ` LIMIT ${pageSize} OFFSET ${offset}`;
 
-      return trips.map(trip => ({
-      tripId: trip.id,
-      title: trip.title,
-      requirements: JSON.parse(trip.requirements || '{}'),
-      activities: JSON.parse(trip.activities || '[]'),
-      status: trip.status,
-      isFavorite: trip.is_favorite === 1,
-      createdAt: trip.created_at,
-      updatedAt: trip.updated_at
-    }));
+      const [trips, countResult] = await Promise.all([
+        dbAll(sql, params),
+        dbGet(countSql, countParams)
+      ]);
+
+      return {
+        trips: trips.map(trip => ({
+          tripId: trip.id,
+          title: trip.title,
+          requirements: JSON.parse(trip.requirements || '{}'),
+          activities: JSON.parse(trip.activities || '[]'),
+          status: trip.status,
+          isFavorite: trip.is_favorite === 1,
+          createdAt: trip.created_at,
+          updatedAt: trip.updated_at
+        })),
+        total: countResult?.total || 0
+      };
     } catch (error) {
       logger.error(`获取用户行程列表失败: ${error.message}`);
-      return [];
+      return { trips: [], total: 0 };
     }
   }
 
