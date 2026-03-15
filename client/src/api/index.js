@@ -1,0 +1,146 @@
+import axios from 'axios'
+
+const api = axios.create({
+  baseURL: '/api',
+  timeout: 120000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+api.interceptors.request.use(
+  (config) => {
+    const sessionId = localStorage.getItem('sessionId')
+    if (sessionId) {
+      config.headers['X-Session-Id'] = sessionId
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+api.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    if (error.response?.status === 429) {
+      console.warn('请求过于频繁')
+    } else if (error.response?.status === 401) {
+      localStorage.removeItem('sessionId')
+      localStorage.removeItem('currentTripId')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+export const chatAPI = {
+  sendMessage: (data, sessionId) => {
+    const config = {}
+    if (sessionId) {
+      config.headers = { 'X-Session-Id': sessionId }
+    }
+    return api.post('/chat', data, config)
+  },
+  getHistory: (conversationId) => api.get(`/chat/history/${conversationId}`)
+}
+
+export const planAPI = {
+  generateItinerary: (message, sessionId, tripId) => {
+    const config = {}
+    if (sessionId) {
+      config.headers = { 'X-Session-Id': sessionId }
+    }
+    return api.post('/plan', { message, tripId }, config)
+  },
+  refreshAttractions: (currentAttractions, sessionId, hotelArea) => {
+    return api.post('/refresh/attractions', { currentAttractions, sessionId, hotelArea })
+  },
+  refreshRestaurants: (currentRestaurants, sessionId) => {
+    return api.post('/refresh/restaurants', { currentRestaurants, sessionId })
+  },
+  refreshSnacks: (currentSnacks, sessionId) => {
+    return api.post('/refresh/snacks', { currentSnacks, sessionId })
+  },
+  refreshDrinks: (currentDrinks, sessionId) => {
+    return api.post('/refresh/drinks', { currentDrinks, sessionId })
+  },
+  refreshCheckIn: (currentCheckInPoints, sessionId) => {
+    return api.post('/refresh/checkin', { currentCheckInPoints, sessionId })
+  },
+  refreshHotels: (currentHotels, sessionId, hotelArea, currentDay) => {
+    return api.post('/refresh/hotels', { currentHotels, sessionId, hotelArea, currentDay })
+  },
+  generateTransportation: (sessionId) => {
+    const config = {}
+    if (sessionId) {
+      config.headers = { 'X-Session-Id': sessionId }
+    }
+    return api.post('/transportation', { sessionId }, config)
+  }
+}
+
+export const tripAPI = {
+  create: (data) => api.post('/trips', data),
+  getById: (id) => api.get(`/trips/${id}`),
+  getUserTrips: (params) => api.get('/trips', { params }),
+  update: (id, data) => api.put(`/trips/${id}`, data),
+  delete: (id) => api.delete(`/trips/${id}`),
+  favorite: (id, isFavorite) => api.post(`/trips/${id}/favorite`, { isFavorite }),
+  duplicate: (id) => api.post(`/trips/${id}/duplicate`),
+  export: (id, format) => api.get(`/trips/${id}/export`, { params: { format } }),
+  share: (id) => api.post(`/trips/${id}/share`)
+}
+
+export const attractionsAPI = {
+  getAll: (params) => api.get('/attractions', { params }),
+  getById: (id) => api.get(`/attractions/${id}`),
+  search: (keyword) => api.get('/attractions/search', { params: { keyword } })
+}
+
+export const restaurantsAPI = {
+  getAll: (params) => api.get('/restaurants', { params }),
+  getById: (id) => api.get(`/restaurants/${id}`),
+  search: (keyword) => api.get('/restaurants/search', { params: { keyword } })
+}
+
+export const hotelsAPI = {
+  getAll: (params) => api.get('/hotels', { params }),
+  getById: (id) => api.get(`/hotels/${id}`)
+}
+
+export const strategiesAPI = {
+  getAll: (params) => api.get('/strategies', { params }),
+  getById: (id) => api.get(`/strategies/${id}`)
+}
+
+export const userAPI = {
+  sendCode: (email) => api.post('/auth/send-code', { email }),
+  register: (data) => api.post('/auth/register', data),
+  login: (email, password) => api.post('/auth/login', { email, password }),
+  logout: () => api.post('/auth/logout'),
+  getProfile: () => api.get('/user/profile'),
+  updateProfile: (data) => api.put('/user/profile', data),
+  updatePreferences: (preferences) => api.put('/user/preferences', { preferences }),
+  changePassword: (oldPassword, newPassword) => api.put('/user/password', { oldPassword, newPassword })
+}
+
+export const favoriteAPI = {
+  add: (type, item) => api.post(`/favorites/${type}`, { item }),
+  remove: (type, itemId) => api.delete(`/favorites/${type}/${itemId}`),
+  getAll: () => api.get('/favorites'),
+  getByType: (type) => api.get(`/favorites/${type}`),
+  toggle: (type, item) => api.post(`/favorites/${type}/toggle`, { item })
+}
+
+export const weatherAPI = {
+  getCurrent: (city) => api.get('/weather', { params: { city } }),
+  getForecast: (city, days) => api.get('/weather/forecast', { params: { city, days } })
+}
+
+export const searchAPI = {
+  all: (keyword) => api.get('/search', { params: { keyword } })
+}
+
+export const getRecommendations = (type) => api.get('/recommendations', { params: { type } })
+
+export default api

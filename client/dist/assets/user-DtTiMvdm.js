@@ -1,0 +1,1 @@
+import{d as r,r as n}from"./index-DLuJE1DL.js";const f=r("user",()=>{const e=n(null),o=n(!1),s=n({crowd:"",budget:"",intensity:"",diet:""});return{userInfo:e,isLoggedIn:o,preferences:s,login:t=>{e.value=t,o.value=!0},logout:()=>{e.value=null,o.value=!1},updatePreferences:t=>{s.value={...s.value,...t}}}});export{f as u};
