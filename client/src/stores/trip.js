@@ -16,6 +16,7 @@ export const useTripStore = defineStore('trip', () => {
   const integratedData = ref(null)
   const conversationHistory = ref([])
   const routes = ref([])
+  const activities = ref([])
 
   const updateTripParams = (params) => {
     tripParams.value = { ...tripParams.value, ...params }
@@ -48,6 +49,10 @@ export const useTripStore = defineStore('trip', () => {
 
   const setRoutes = (routeData) => {
     routes.value = routeData
+  }
+
+  const setActivities = (data) => {
+    activities.value = data
   }
 
   const addRoute = (route) => {

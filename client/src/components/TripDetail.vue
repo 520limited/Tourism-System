@@ -63,6 +63,27 @@
       </div>
     </div>
 
+    <div v-if="tripStore.activities && tripStore.activities.length > 0" class="special-activities">
+      <div class="section-header">
+        <div class="section-title">
+          <el-icon><Star /></el-icon>
+          特殊活动
+        </div>
+      </div>
+      <div class="activities-list">
+        <el-tag 
+          v-for="(activity, idx) in tripStore.activities" 
+          :key="idx" 
+          type="warning" 
+          size="large"
+          effect="dark"
+          style="margin: 4px;"
+        >
+          {{ activity }}
+        </el-tag>
+      </div>
+    </div>
+
     <div v-if="hasItinerary" class="daily-trips">
       <el-tabs v-model="activeDay" type="border-card" @tab-change="handleDayChange">
         <el-tab-pane
@@ -968,6 +989,32 @@ const printTrip = async () => {
 
 .progress-bar {
   margin-top: 8px;
+}
+
+.special-activities {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #fff7e6 0%, #ffecd2 100%);
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.special-activities .section-header {
+  margin-bottom: 12px;
+}
+
+.special-activities .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6a23c;
+}
+
+.activities-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .daily-trips {

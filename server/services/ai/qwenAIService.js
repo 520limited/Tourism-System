@@ -16,7 +16,7 @@ class QwenAIService {
   /**
    * 处理用户自然语言输入，直接生成行程（优化版：精简prompt，提速）
    */
-                                                                                                                                                        async generateTripFromNaturalLanguage(userMessage, conversationHistory = []) {
+  async generateTripFromNaturalLanguage(userMessage, conversationHistory = []) {
     const systemPrompt = `你是长沙旅游规划专家"小沙"。你必须直接生成完整行程，不要先确认需求，不要问问题，直接根据用户输入生成行程。
 
 【重要规则】
@@ -29,21 +29,29 @@ class QwenAIService {
 {
   "message": "为您生成了X天行程，包含...",
   "requirements": {"days":3,"crowd":"情侣","budget":"1000-2000","interests":["美食"],"foodPreferences":["臭豆腐"],"hotelArea":"五一广场"},
-  "activities": ["摄影交流","当地文化体验"],
+  "activities": ["看橘子洲烟花","夜游湘江"],
   "itinerary": [{
     "day":1,"title":"第一天：橘子洲-五一广场",
     "attractions":[{"id":"attr_1","name":"橘子洲","type":"自然风光","rating":4.8,"description":"长沙地标","address":"长沙市岳麓区橘子洲头","latitude":28.1711,"longitude":112.9654,"ticketPrice":0,"estimatedDuration":3,"bestTime":"上午"}],
-    "restaurants":[{"id":"rest_1","name":"费大厨辣椒炒肉","cuisine":"湘菜","rating":4.7,                                                      "avgPrice":80,"address":"长沙市天心区坡子街","latitude":28.1942,"longitude":112.9723,"specialty":"辣椒炒肉"}],
+    "restaurants":[{"id":"rest_1","name":"费大厨辣椒炒肉","cuisine":"湘菜","rating":4.7,"avgPrice":80,"address":"长沙市天心区坡子街","latitude":28.1942,"longitude":112.9723,"specialty":"辣椒炒肉"}],
     "hotels":[{"id":"hotel_1","name":"长沙五一广场如家酒店","starRating":3,"rating":4.5,"pricePerNight":280,"address":"长沙市芙蓉区五一大道","latitude":28.1985,"longitude":112.9712}]
   }]
 }
 
-【规则】
-1.每天安排的景点要根据用户对“轻松和累”的界定来判断、3家餐厅、3家酒店
-2.经纬度必须准确，价格必须真实
-3.每日景点按地理位置就近安排，景点可以小众或者可以单单是某一个网红地点（如hibhub长沙公社这种，当然必须得到用户明确指示）
-4.推荐内容要多样化，避免重复推荐常见景点，且必须符合用户的特别要求
-5.如果用户输入简短或信息不足，则你自己根据用户的输入进行补充完善以及推荐;`
+【activities字段说明】
+从用户输入中提取所有特殊活动要求，例如：
+- "看烟花" -> activities添加"看橘子洲烟花"
+- "户外拍照" -> activities添加"户外摄影"
+- "夜生活" -> activities添加"夜游体验"
+- "下雨改室内" -> activities添加"备选室内方案"
+- "薛定谔的行程" -> activities添加"灵活调整行程"
+
+【行程规划规则】
+1. 每天安排的景点要根据用户对“轻松和累”的界定来判断，至少3个景点，3家餐厅，3家酒店
+2. 经纬度必须准确，价格必须真实
+3. 每日景点按地理位置就近安排
+4. 推荐内容要多样化，必须符合用户的特别要求
+5. 对于特殊需求（如素食、过敏、孕妇等），在餐厅和活动安排中特别标注`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
