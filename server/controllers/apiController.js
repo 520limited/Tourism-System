@@ -332,13 +332,15 @@ router.post('/chat', async (req, res) => {
       session.requirements = aiResult.requirements;
 
       // 保存行程到数据库
-      const tripId = await tripService.saveTrip({
-        userId: req.userId || null,
-        title: `${aiResult.requirements.days || 3}天${aiResult.requirements.crowd || '游客'}长沙游`,
-        requirements: aiResult.requirements,
-        itinerary: verifiedItinerary,
-        conversationHistory: session.history
-      });
+      const tripResult = await tripService.createTrip(
+        req.userId || null,
+        aiResult.requirements,
+        verifiedItinerary,
+        session.history,
+        [],
+        aiResult.activities || []
+      );
+      const tripId = tripResult.tripId;
 
       sessions.set(sessionId, session);
 
@@ -568,11 +570,22 @@ router.get('/trips', async (req, res) => {
   try {
     let userId = null;
     const sessionId = req.headers['x-session-id'];
+    logger.info(`获取行程列表 - sessionId: ${sessionId}`);
+    
     if (sessionId) {
       const user = await userService.getUserBySession(sessionId);
+      logger.info(`获取行程列表 - user: ${JSON.stringify(user)}`);
       if (user) {
         userId = user.userId;
       }
+    }
+    
+    logger.info(`获取行程列表 - userId: ${userId}`);
+    
+    // 游客模式下返回空列表，因为游客没有历史行程
+    if (!userId) {
+      logger.info('游客模式，返回空列表');
+      return res.json({ code: 200, data: { trips: [], total: 0 } });
     }
     
     const trips = await tripService.getUserTrips(userId, req.query);

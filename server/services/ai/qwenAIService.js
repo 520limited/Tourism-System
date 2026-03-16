@@ -16,7 +16,7 @@ class QwenAIService {
   /**
    * 处理用户自然语言输入，直接生成行程（优化版：精简prompt，提速）
    */
-  async generateTripFromNaturalLanguage(userMessage, conversationHistory = []) {
+                                                                                                                                                        async generateTripFromNaturalLanguage(userMessage, conversationHistory = []) {
     const systemPrompt = `你是长沙旅游规划专家"小沙"。你必须直接生成完整行程，不要先确认需求，不要问问题，直接根据用户输入生成行程。
 
 【重要规则】
@@ -33,7 +33,7 @@ class QwenAIService {
   "itinerary": [{
     "day":1,"title":"第一天：橘子洲-五一广场",
     "attractions":[{"id":"attr_1","name":"橘子洲","type":"自然风光","rating":4.8,"description":"长沙地标","address":"长沙市岳麓区橘子洲头","latitude":28.1711,"longitude":112.9654,"ticketPrice":0,"estimatedDuration":3,"bestTime":"上午"}],
-    "restaurants":[{"id":"rest_1","name":"费大厨辣椒炒肉","cuisine":"湘菜","rating":4.7,"avgPrice":80,"address":"长沙市天心区坡子街","latitude":28.1942,"longitude":112.9723,"specialty":"辣椒炒肉"}],
+    "restaurants":[{"id":"rest_1","name":"费大厨辣椒炒肉","cuisine":"湘菜","rating":4.7,                                                      "avgPrice":80,"address":"长沙市天心区坡子街","latitude":28.1942,"longitude":112.9723,"specialty":"辣椒炒肉"}],
     "hotels":[{"id":"hotel_1","name":"长沙五一广场如家酒店","starRating":3,"rating":4.5,"pricePerNight":280,"address":"长沙市芙蓉区五一大道","latitude":28.1985,"longitude":112.9712}]
   }]
 }
