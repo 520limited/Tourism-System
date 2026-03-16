@@ -18,6 +18,8 @@ class TripService {
     const title = this.generateTripTitle(safeParams);
 
     try {
+      logger.info(`创建行程参数 - userId: ${userId}, sessionId: ${sessionId}, title: ${title}`);
+      
       await dbRun(
         `INSERT INTO trips (id, user_id, session_id, title, requirements, itinerary, conversation_history, routes, activities, status) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -103,6 +105,8 @@ class TripService {
 
   async getUserTrips(userId, filters = {}, sessionId = null) {
     try {
+      logger.info(`getUserTrips 参数 - userId: ${userId}, sessionId: ${sessionId}`);
+      
       let countSql = 'SELECT COUNT(*) as total FROM trips WHERE 1=1';
       let sql = 'SELECT * FROM trips WHERE 1=1';
       const params = [];
@@ -113,14 +117,17 @@ class TripService {
         countSql += ' AND user_id = ?';
         params.push(userId);
         countParams.push(userId);
+        logger.info(`查询用户行程，userId: ${userId}`);
       } else if (sessionId) {
         // 游客模式：通过 session_id 查询
         sql += ' AND session_id = ?';
         countSql += ' AND session_id = ?';
         params.push(sessionId);
         countParams.push(sessionId);
+        logger.info(`查询游客行程，sessionId: ${sessionId}`);
       } else {
         // 既没有 userId 也没有 sessionId，返回空
+        logger.info('无用户信息，返回空列表');
         return { trips: [], total: 0 };
       }
 

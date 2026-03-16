@@ -317,6 +317,13 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ code: 400, message: '消息不能为空' });
     }
 
+    // 获取用户ID
+    let userId = null;
+    const user = await userService.getUserBySession(sessionId);
+    if (user) {
+      userId = user.userId;
+    }
+
     let session = sessions.get(sessionId) || {
       history: [],
       requirements: {},
@@ -326,20 +333,22 @@ router.post('/chat', async (req, res) => {
 
     session.history.push({ role: 'user', content: message });
 
-    // 直接调用AI生成行程（一次性返回标签+行程）
+    // 先获取天气数据
+    const weatherData = await amapService.getWeather();
+    logger.info(`获取天气数据: ${weatherData ? '成功' : '失败'}`);
+
+    // 将天气数据传递给 AI
     const aiResult = await qwenAIService.generateTripFromNaturalLanguage(
       message,
-      session.history
+      session.history,
+      weatherData
     );
 
     session.history.push({ role: 'assistant', content: aiResult.message });
 
     if (aiResult.ready && aiResult.itinerary && aiResult.itinerary.length > 0) {
-      // 并行执行：验证坐标 + 获取天气
-      const [verifiedItinerary, weatherData] = await Promise.all([
-        locationVerifyService.verifyItinerary(aiResult.itinerary),
-        amapService.getWeather()
-      ]);
+      // 验证坐标
+      const verifiedItinerary = await locationVerifyService.verifyItinerary(aiResult.itinerary);
       
       session.itinerary = verifiedItinerary;
       session.requirements = aiResult.requirements;
@@ -355,7 +364,7 @@ router.post('/chat', async (req, res) => {
 
       // 保存行程到数据库
       const tripResult = await tripService.createTrip(
-        req.userId || null,
+        userId,
         aiResult.requirements,
         verifiedItinerary,
         session.history,

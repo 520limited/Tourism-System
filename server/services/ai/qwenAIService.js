@@ -7,54 +7,41 @@ const logger = require('../logger');
  */
 class QwenAIService {
   constructor() {
-    this.apiKey = process.env.QWEN_API_KEY 
+    this.apiKey = process.env.QWEN_API_KEY
     // 使用阿里云百炼平台OpenAI兼容模式API
     this.baseUrl = process.env.QWEN_API_URL || 'https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1';
     this.model = process.env.QWEN_MODEL || 'qwen-plus'; // 使用qwen-plus模型或从环境变量读取
   }
 
   /**
-   * 处理用户自然语言输入，直接生成行程（优化版：精简prompt，提速）
+   * 处理用户自然语言输入，直接生成行程
    */
-  async generateTripFromNaturalLanguage(userMessage, conversationHistory = []) {
-    const systemPrompt = `你是长沙旅游规划专家"小沙"。你必须直接生成完整行程，不要先确认需求，不要问问题，直接根据用户输入生成行程。
+  async generateTripFromNaturalLanguage(userMessage, conversationHistory = [], weatherData = null) {
+    // 构建天气信息
+    let weatherInfo = '';
+    if (weatherData) {
+      const now = weatherData.now;
+      const forecast = weatherData.forecast || [];
+      weatherInfo = `\n【天气】当前${now.temperature}°C，${now.weather}`;
+      forecast.slice(0, 3).forEach(f => {
+        weatherInfo += `；${f.date} ${f.dayWeather}${f.dayTemp}°C`;
+      });
+    }
 
-【重要规则】
-1. 无论用户输入多么复杂或信息不足，都必须直接生成行程
-2. 如果信息不足，自动补充合理的默认值
-3. 永远不要回复"请再说一次"或"正在为您生成"等确认消息
-4. 直接返回JSON格式的完整行程
+    const systemPrompt = `你是长沙旅游规划专家。直接返回JSON行程，不要确认。
+${weatherInfo}
+雨天优先室内景点（博物馆、商场），晴天可户外。
 
-【输出格式】必须严格遵循以下格式（以下仅为示例）：
-{
-  "message": "为您生成了X天行程，包含...",
-  "requirements": {"days":3,"crowd":"情侣","budget":"1000-2000","interests":["美食"],"foodPreferences":["臭豆腐"],"hotelArea":"五一广场"},
-  "activities": ["看橘子洲烟花","夜游湘江"],
-  "itinerary": [{
-    "day":1,"title":"第一天：橘子洲-五一广场",
-    "attractions":[{"id":"attr_1","name":"橘子洲","type":"自然风光","rating":4.8,"description":"长沙地标","address":"长沙市岳麓区橘子洲头","latitude":28.1711,"longitude":112.9654,"ticketPrice":0,"estimatedDuration":3,"bestTime":"上午"}],
-    "restaurants":[{"id":"rest_1","name":"费大厨辣椒炒肉","cuisine":"湘菜","rating":4.7,"avgPrice":80,"address":"长沙市天心区坡子街","latitude":28.1942,"longitude":112.9723,"specialty":"辣椒炒肉"}],
-    "hotels":[{"id":"hotel_1","name":"长沙五一广场如家酒店","starRating":3,"rating":4.5,"pricePerNight":280,"address":"长沙市芙蓉区五一大道","latitude":28.1985,"longitude":112.9712}]
-  }]
-}
+返回格式：
+{"message":"行程简介","requirements":{"days":3,"crowd":"情侣","budget":"1000-2000","interests":["美食"],"hotelArea":"五一广场"},"activities":["特殊活动"],"itinerary":[{"day":1,"title":"第一天","attractions":[{"name":"景点名","type":"类型","rating":4.8,"description":"描述","address":"地址","latitude":28.17,"longitude":112.96,"ticketPrice":0,"estimatedDuration":2,"bestTime":"上午"}],"restaurants":[{"name":"餐厅名","cuisine":"湘菜","rating":4.7,"avgPrice":80,"address":"地址","latitude":28.19,"longitude":112.97,"specialty":"招牌菜"}],"hotels":[{"name":"酒店名","starRating":3,"rating":4.5,"pricePerNight":280,"address":"地址","latitude":28.19,"longitude":112.97}]}]}
 
-【activities字段说明】
-从用户输入中提取所有特殊活动要求，例如：
-- "看烟花" -> activities添加"看橘子洲烟花"
-- "户外拍照" -> activities添加"户外摄影"
-
-【行程规划规则】
-1. 每天安排的景点要根据用户对“轻松和累”的界定来判断，至少3个景点，3家餐厅，3家酒店
-2. 经纬度必须准确，价格必须真实
-3. 每日景点按地理位置就近安排
-4. 推荐内容要多样化，必须符合用户的特别要求
-5. 对于特殊需求（如素食、过敏、孕妇等），在餐厅和活动安排中特别标注`;
+规则：每天3景点3餐厅3酒店；坐标准确价格真实；就近安排；提取用户特殊活动到activities字段`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
       ...conversationHistory.slice(-10)
     ];
-    
+
     const lastMessage = conversationHistory[conversationHistory.length - 1];
     if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== userMessage) {
       messages.push({ role: 'user', content: userMessage });
@@ -64,16 +51,16 @@ class QwenAIService {
       logger.info(`=== AI生成行程请求 ===`);
       logger.info(`用户输入: ${userMessage}`);
       logger.info(`历史消息数: ${conversationHistory.length}`);
-      
+
       const aiResponse = await this.callAPI(messages);
-      
+
       logger.info(`=== AI返回内容 ===`);
       logger.info(aiResponse);
-      
+
       const result = this.parseTripResponse(aiResponse);
-      
+
       logger.info(`AI生成完成: ${result.itinerary ? result.itinerary.length + '天行程' : '未完成'}`);
-      
+
       return result;
     } catch (error) {
       logger.error(`AI生成行程失败: ${error.message}`);
@@ -90,14 +77,14 @@ class QwenAIService {
       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         let jsonStr = jsonMatch[0];
-        
+
         // 预处理：修复中文引号和其他常见问题
         jsonStr = this.preprocessJSON(jsonStr);
-        
+
         // 尝试解析JSON
         try {
           const data = JSON.parse(jsonStr);
-          
+
           // 输出解析后的数据摘要
           logger.info(`解析成功 - 需求: ${JSON.stringify(data.requirements || {})}`);
           logger.info(`解析成功 - activities: ${JSON.stringify(data.activities || [])}`);
@@ -108,7 +95,7 @@ class QwenAIService {
             logger.info(`第一天餐厅数: ${firstDay.restaurants ? firstDay.restaurants.length : 0}`);
             logger.info(`第一天酒店数: ${firstDay.hotels ? firstDay.hotels.length : 0}`);
           }
-          
+
           return {
             message: data.message || '行程已生成',
             requirements: data.requirements || {},
@@ -120,14 +107,14 @@ class QwenAIService {
           // JSON解析失败，尝试修复
           logger.warn(`JSON解析失败，尝试修复: ${parseError.message}`);
           logger.warn(`问题位置附近内容: ${jsonStr.substring(Math.max(0, 270), 300)}`);
-          
+
           // 尝试修复常见的JSON错误
           jsonStr = this.fixJSON(jsonStr);
-          
+
           try {
             const data = JSON.parse(jsonStr);
             logger.info(`JSON修复成功`);
-            
+
             return {
               message: data.message || '行程已生成',
               requirements: data.requirements || {},
@@ -144,7 +131,7 @@ class QwenAIService {
       logger.error(`JSON解析失败: ${error.message}`);
       logger.error(`AI响应: ${aiResponse.substring(0, 500)}`);
     }
-    
+
     // 解析失败，返回错误
     return {
       message: '行程生成失败，请重试',
@@ -161,19 +148,19 @@ class QwenAIService {
   preprocessJSON(jsonStr) {
     // 1. 替换中文引号为英文引号
     jsonStr = jsonStr.replace(/[""]/g, '"');
-    
+
     // 2. 替换中文冒号为英文冒号
     jsonStr = jsonStr.replace(/：/g, ':');
-    
+
     // 3. 替换中文逗号为英文逗号（在JSON结构中）
     // 注意：不要替换字符串内部的中文逗号
     let result = '';
     let inString = false;
     let escaped = false;
-    
+
     for (let i = 0; i < jsonStr.length; i++) {
       const char = jsonStr[i];
-      
+
       if (!inString) {
         if (char === '"') {
           inString = true;
@@ -200,7 +187,7 @@ class QwenAIService {
         }
       }
     }
-    
+
     return result;
   }
 
@@ -209,45 +196,45 @@ class QwenAIService {
    */
   fixJSON(jsonStr) {
     logger.info(`开始修复JSON，原始长度: ${jsonStr.length}`);
-    
+
     // 1. 首先尝试找到最外层的大括号
     const firstBrace = jsonStr.indexOf('{');
     const lastBrace = jsonStr.lastIndexOf('}');
-    
+
     if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
       logger.error('无法找到有效的JSON边界');
       return jsonStr;
     }
-    
+
     // 提取核心JSON内容
     jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
-    
+
     // 2. 修复字符串中的特殊字符（在属性值中）
     // 先保护已经正确转义的字符
     const placeholder = '\u0000';
     const protectedChars = [];
-    
+
     // 保护已经转义的字符
     jsonStr = jsonStr.replace(/\\"/g, (match) => {
       protectedChars.push(match);
       return placeholder + (protectedChars.length - 1) + placeholder;
     });
-    
+
     // 保护 Unicode 转义序列
     jsonStr = jsonStr.replace(/\\u[0-9a-fA-F]{4}/g, (match) => {
       protectedChars.push(match);
       return placeholder + (protectedChars.length - 1) + placeholder;
     });
-    
+
     // 3. 修复字符串中的换行符和制表符（只在字符串值中）
     let inString = false;
     let escaped = false;
     let result = '';
-    
+
     for (let i = 0; i < jsonStr.length; i++) {
       const char = jsonStr[i];
       const nextChar = jsonStr[i + 1];
-      
+
       if (!inString) {
         if (char === '"') {
           inString = true;
@@ -274,17 +261,17 @@ class QwenAIService {
         }
       }
     }
-    
+
     jsonStr = result;
-    
+
     // 4. 恢复保护的字符
     protectedChars.forEach((char, index) => {
       jsonStr = jsonStr.replace(placeholder + index + placeholder, char);
     });
-    
+
     // 5. 修复末尾多余的逗号
     jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
-    
+
     // 6. 修复对象或数组后面缺少逗号的情况
     jsonStr = jsonStr.replace(/}(\s*")/g, '},$1');
     jsonStr = jsonStr.replace(/](\s*")/g, '],$1');
@@ -292,17 +279,17 @@ class QwenAIService {
     jsonStr = jsonStr.replace(/](\s*\[)/g, '],$1');
     jsonStr = jsonStr.replace(/}(\s*\[)/g, '},$1');
     jsonStr = jsonStr.replace(/](\s*{)/g, '],$1');
-    
+
     // 7. 修复true/false/null后面缺少逗号
     jsonStr = jsonStr.replace(/(true|false|null)(\s*")/g, '$1,$2');
     jsonStr = jsonStr.replace(/(true|false|null)(\s*{)/g, '$1,$2');
     jsonStr = jsonStr.replace(/(true|false|null)(\s*\[)/g, '$1,$2');
-    
+
     // 8. 修复数字后面缺少逗号
     jsonStr = jsonStr.replace(/(\d)(\s*")/g, '$1,$2');
     jsonStr = jsonStr.replace(/(\d)(\s*{)/g, '$1,$2');
     jsonStr = jsonStr.replace(/(\d)(\s*\[)/g, '$1,$2');
-    
+
     // 9. 修复属性名中包含特殊字符的情况
     jsonStr = jsonStr.replace(/"([^"]*)":\s*"([^"]*)"/g, (match, key, value) => {
       // 清理 key 中的特殊字符
@@ -311,13 +298,13 @@ class QwenAIService {
       const cleanValue = value.replace(/[\n\r\t]/g, '');
       return `"${cleanKey}": "${cleanValue}"`;
     });
-    
+
     // 10. 只修复明显错误的数字格式（如多余的引号）
     // 修复类似 "latitude": "28.1234" 应该 latitude: 28.1234 的情况
     jsonStr = jsonStr.replace(/"(-?\d+\.\d+)"/g, (match, num) => num);
-    
+
     logger.info(`JSON修复完成，新长度: ${jsonStr.length}`);
-    
+
     return jsonStr;
   }
 
@@ -348,7 +335,7 @@ class QwenAIService {
       { role: 'system', content: systemPrompt },
       ...conversationHistory.slice(-10)
     ];
-    
+
     const lastMessage = conversationHistory[conversationHistory.length - 1];
     if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== message) {
       messages.push({ role: 'user', content: message });
@@ -358,12 +345,12 @@ class QwenAIService {
       logger.info(`=== AI对话请求 ===`);
       logger.info(`用户消息: ${message}`);
       logger.info(`历史消息数: ${conversationHistory.length}`);
-      
+
       const aiResponse = await this.callAPI(messages);
-      
+
       logger.info(`=== AI对话返回 ===`);
       logger.info(aiResponse);
-      
+
       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[0]);
@@ -373,7 +360,7 @@ class QwenAIService {
           requirements: data.requirements || {}
         };
       }
-      
+
       return {
         message: aiResponse,
         adjustmentType: null,
@@ -504,7 +491,7 @@ ${type === 'attractions' ? `{
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[0]);
         const recommendations = data.recommendations || [];
-        
+
         // 为每个推荐添加ID
         recommendations.forEach((item, index) => {
           item.id = `${type.slice(0, 4)}_${Date.now()}_${index}`;
