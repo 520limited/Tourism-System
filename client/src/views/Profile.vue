@@ -49,6 +49,8 @@
       </div>
       
       <div class="profile-main">
+        <StatsDashboard :stats="dashboardStats" />
+        
         <div class="stats-section">
           <div class="section-title">使用统计</div>
           <div class="stats-grid">
@@ -174,6 +176,7 @@ import { useTripStore } from '../stores/trip'
 import { userAPI, tripAPI } from '../api'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Edit, Document, Star, Setting, Lock, SwitchButton, MapLocation, Location, House } from '@element-plus/icons-vue'
+import StatsDashboard from '../components/StatsDashboard.vue'
 
 const Food = { template: '<svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M896 128H128v128a128 128 0 0 0 128 128h64v448a64 64 0 0 0 64 64h256a64 64 0 0 0 64-64V384h64a128 128 0 0 0 128-128V128zm-64 128a64 64 0 0 1-64 64H256a64 64 0 0 1-64-64v-64h640v64z"/></svg>' }
 
@@ -197,6 +200,15 @@ const stats = reactive({
 const totalFavorites = computed(() => 
   stats.favoriteAttractions + stats.favoriteRestaurants + stats.favoriteHotels
 )
+
+const dashboardStats = computed(() => ({
+  totalTrips: stats.totalTrips,
+  favoriteCount: totalFavorites.value,
+  totalAttractions: stats.favoriteAttractions,
+  totalRestaurants: stats.favoriteRestaurants,
+  crowdTypes: {},
+  monthlyTrips: {}
+}))
 
 const editForm = reactive({
   nickname: ''
@@ -486,6 +498,9 @@ onMounted(() => {
 }
 
 .stats-section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
   margin-bottom: 24px;
 }
 

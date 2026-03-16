@@ -25,7 +25,7 @@ class QwenAIService {
 3. 永远不要回复"请再说一次"或"正在为您生成"等确认消息
 4. 直接返回JSON格式的完整行程
 
-【输出格式】必须严格遵循：
+【输出格式】必须严格遵循以下格式（以下仅为示例）：
 {
   "message": "为您生成了X天行程，包含...",
   "requirements": {"days":3,"crowd":"情侣","budget":"1000-2000","interests":["美食"],"foodPreferences":["臭豆腐"],"hotelArea":"五一广场"},
@@ -42,9 +42,6 @@ class QwenAIService {
 从用户输入中提取所有特殊活动要求，例如：
 - "看烟花" -> activities添加"看橘子洲烟花"
 - "户外拍照" -> activities添加"户外摄影"
-- "夜生活" -> activities添加"夜游体验"
-- "下雨改室内" -> activities添加"备选室内方案"
-- "薛定谔的行程" -> activities添加"灵活调整行程"
 
 【行程规划规则】
 1. 每天安排的景点要根据用户对“轻松和累”的界定来判断，至少3个景点，3家餐厅，3家酒店
@@ -103,6 +100,7 @@ class QwenAIService {
           
           // 输出解析后的数据摘要
           logger.info(`解析成功 - 需求: ${JSON.stringify(data.requirements || {})}`);
+          logger.info(`解析成功 - activities: ${JSON.stringify(data.activities || [])}`);
           logger.info(`解析成功 - 行程天数: ${data.itinerary ? data.itinerary.length : 0}`);
           if (data.itinerary && data.itinerary.length > 0) {
             const firstDay = data.itinerary[0];

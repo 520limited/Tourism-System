@@ -296,6 +296,10 @@ const submitQuickForm = async () => {
         tripStore.updateTripParams(res.data.requirements)
       }
       
+      if (res.data.activities) {
+        tripStore.setActivities(res.data.activities)
+      }
+      
       if (res.data.ready && res.data.itinerary) {
         tripStore.setItinerary(res.data.itinerary)
         tripStore.setTripId(res.data.tripId)
@@ -649,7 +653,7 @@ onMounted(() => {
 }
 
 .avatar.bot {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #db72e9;
   color: #fff;
 }
 
@@ -670,7 +674,7 @@ onMounted(() => {
 
 .message-role {
   font-size: 12px;
-  color: #9ca3af;
+  color: #fefdff;
   margin-bottom: 4px;
 }
 
@@ -680,11 +684,11 @@ onMounted(() => {
   font-size: 14px;
   line-height: 1.6;
   color: #1f2937;
-  background: #f3f4f6;
+  background: #dde6df;
 }
 
 .message-wrapper.user .message-content {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #8e818f;
   color: #fff;
 }
 
@@ -876,7 +880,7 @@ onMounted(() => {
 
 .send-btn {
   flex-shrink: 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #969a9e;
   border: none;
 }
 

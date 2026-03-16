@@ -86,6 +86,17 @@ const createTables = async () => {
       logger.warn(`迁移检查失败: ${migrationError.message}`);
     }
 
+    // 迁移：检查并添加 session_id 列
+    try {
+      const [sessionColumns] = await conn.query(`SHOW COLUMNS FROM trips LIKE 'session_id'`);
+      if (sessionColumns.length === 0) {
+        await conn.query(`ALTER TABLE trips ADD COLUMN session_id VARCHAR(64) AFTER user_id`);
+        logger.info('已添加 session_id 列到 trips 表');
+      }
+    } catch (migrationError) {
+      logger.warn(`session_id 迁移检查失败: ${migrationError.message}`);
+    }
+
     await conn.query(`
       CREATE TABLE IF NOT EXISTS trip_conversations (
         id VARCHAR(64) PRIMARY KEY,

@@ -11,7 +11,7 @@ class TripService {
     this.sharedTrips = new Map();
   }
 
-  async createTrip(userId, params, itinerary, conversationHistory = [], routes = [], activities = []) {
+  async createTrip(userId, params, itinerary, conversationHistory = [], routes = [], activities = [], sessionId = null) {
     const safeParams = params || { days: 3, crowd: '' };
     const tripId = uuidv4();
     const conversationId = uuidv4();
@@ -19,11 +19,12 @@ class TripService {
 
     try {
       await dbRun(
-        `INSERT INTO trips (id, user_id, title, requirements, itinerary, conversation_history, routes, activities, status) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO trips (id, user_id, session_id, title, requirements, itinerary, conversation_history, routes, activities, status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           tripId,
           userId || null,
+          sessionId || null,
           title,
           JSON.stringify(params || {}),
           JSON.stringify(itinerary || []),
@@ -100,7 +101,7 @@ class TripService {
     }
   }
 
-  async getUserTrips(userId, filters = {}) {
+  async getUserTrips(userId, filters = {}, sessionId = null) {
     try {
       let countSql = 'SELECT COUNT(*) as total FROM trips WHERE 1=1';
       let sql = 'SELECT * FROM trips WHERE 1=1';
@@ -112,9 +113,15 @@ class TripService {
         countSql += ' AND user_id = ?';
         params.push(userId);
         countParams.push(userId);
+      } else if (sessionId) {
+        // 游客模式：通过 session_id 查询
+        sql += ' AND session_id = ?';
+        countSql += ' AND session_id = ?';
+        params.push(sessionId);
+        countParams.push(sessionId);
       } else {
-        sql += ' AND user_id IS NULL';
-        countSql += ' AND user_id IS NULL';
+        // 既没有 userId 也没有 sessionId，返回空
+        return { trips: [], total: 0 };
       }
 
       if (filters.status) {

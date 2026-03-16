@@ -224,14 +224,24 @@ router.post('/plan', async (req, res) => {
     const hotelArea = aiResult.requirements.hotelArea || '五一广场';
     const hotelBudget = aiResult.requirements.budget || '500-1000';
 
-    // 并行执行：酒店搜索 + 坐标验证
-    const [realtimeHotels, verifiedItinerary] = await Promise.all([
+    // 并行执行：酒店搜索 + 坐标验证 + 天气获取
+    const [realtimeHotels, verifiedItinerary, weatherData] = await Promise.all([
       hotelSearchService.searchHotelsByAreaAndBudget(hotelArea, hotelBudget, 3),
-      locationVerifyService.verifyItinerary(aiResult.itinerary)
+      locationVerifyService.verifyItinerary(aiResult.itinerary),
+      amapService.getWeather()
     ]);
 
     // 替换为实时搜索的酒店
     verifiedItinerary.forEach(day => { day.hotels = realtimeHotels; });
+
+    // 添加天气数据到每天行程
+    if (weatherData && weatherData.forecast) {
+      verifiedItinerary.forEach((day, index) => {
+        if (weatherData.forecast[index]) {
+          day.weather = weatherData.forecast[index];
+        }
+      });
+    }
 
     // 计算费用
     const costData = costCalculatorService.calculateTotalCost(verifiedItinerary, aiResult.requirements);
@@ -325,11 +335,23 @@ router.post('/chat', async (req, res) => {
     session.history.push({ role: 'assistant', content: aiResult.message });
 
     if (aiResult.ready && aiResult.itinerary && aiResult.itinerary.length > 0) {
-      // 验证并修正行程中的所有地点坐标
-      const verifiedItinerary = await locationVerifyService.verifyItinerary(aiResult.itinerary);
+      // 并行执行：验证坐标 + 获取天气
+      const [verifiedItinerary, weatherData] = await Promise.all([
+        locationVerifyService.verifyItinerary(aiResult.itinerary),
+        amapService.getWeather()
+      ]);
       
       session.itinerary = verifiedItinerary;
       session.requirements = aiResult.requirements;
+
+      // 添加天气数据到每天行程
+      if (weatherData && weatherData.forecast) {
+        verifiedItinerary.forEach((day, index) => {
+          if (weatherData.forecast[index]) {
+            day.weather = weatherData.forecast[index];
+          }
+        });
+      }
 
       // 保存行程到数据库
       const tripResult = await tripService.createTrip(
@@ -338,7 +360,8 @@ router.post('/chat', async (req, res) => {
         verifiedItinerary,
         session.history,
         [],
-        aiResult.activities || []
+        aiResult.activities || [],
+        sessionId
       );
       const tripId = tripResult.tripId;
 
@@ -351,6 +374,7 @@ router.post('/chat', async (req, res) => {
           sessionId,
           tripId,
           requirements: aiResult.requirements,
+          activities: aiResult.activities || [],
           itinerary: verifiedItinerary,
           ready: true
         }
@@ -582,13 +606,8 @@ router.get('/trips', async (req, res) => {
     
     logger.info(`获取行程列表 - userId: ${userId}`);
     
-    // 游客模式下返回空列表，因为游客没有历史行程
-    if (!userId) {
-      logger.info('游客模式，返回空列表');
-      return res.json({ code: 200, data: { trips: [], total: 0 } });
-    }
-    
-    const trips = await tripService.getUserTrips(userId, req.query);
+    // 传递 sessionId，让游客也能看到自己创建的行程
+    const trips = await tripService.getUserTrips(userId, req.query, userId ? null : sessionId);
     res.json({ code: 200, data: trips });
   } catch (error) {
     logger.error(`获取行程列表失败: ${error.message}`);
