@@ -8,12 +8,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.3.11",
-    "vue-router": "^4.2.5",
-    "pinia": "^2.1.7",
-    "element-plus": "^2.5.1",
+    "@amap/amap-jsapi-loader": "^1.0.1",
     "axios": "^1.6.2",
-    "@amap/amap-jsapi-loader": "^1.0.1"
+    "element-plus": "^2.5.1",
+    "marked": "^17.0.4",
+    "pinia": "^2.1.7",
+    "vue": "^3.3.11",
+    "vue-router": "^4.2.5"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

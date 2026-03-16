@@ -165,6 +165,7 @@ import { useMapStore } from '../stores/map'
 import { chatAPI, planAPI } from '../api'
 import { RefreshRight, Position, Upload, Edit, MapLocation, Location, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { marked } from 'marked'
 
 const tripStore = useTripStore()
 const mapStore = useMapStore()
@@ -215,9 +216,18 @@ const scrollToBottom = () => {
 
 const formatMessage = (content) => {
   if (!content) return ''
-  return content
-    .replace(/【需求收集完成】/g, '<span class="highlight-tag">需求收集完成</span>')
-    .replace(/\n/g, '<br>')
+  
+  // 配置 marked 选项
+  marked.setOptions({
+    breaks: true,
+    gfm: true
+  })
+  
+  // 先处理特殊标签
+  let processed = content.replace(/【需求收集完成】/g, '<span class="highlight-tag">需求收集完成</span>')
+  
+  // 使用 marked 解析 markdown
+  return marked.parse(processed)
 }
 
 const submitQuickForm = async () => {
@@ -679,12 +689,120 @@ onMounted(() => {
 }
 
 .message-content :deep(.highlight-tag) {
-  display: inline-block;
   background: rgba(16, 185, 129, 0.1);
   color: #059669;
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 500;
+}
+
+/* Markdown 样式 */
+.message-content :deep(h1) {
+  font-size: 1.4em;
+  font-weight: 600;
+  margin: 0.5em 0;
+  color: #303133;
+}
+
+.message-content :deep(h2) {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin: 0.5em 0;
+  color: #303133;
+}
+
+.message-content :deep(h3) {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0.5em 0;
+  color: #303133;
+}
+
+.message-content :deep(p) {
+  margin: 0.5em 0;
+  line-height: 1.6;
+}
+
+.message-content :deep(ul), .message-content :deep(ol) {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.message-content :deep(li) {
+  margin: 0.25em 0;
+  line-height: 1.5;
+}
+
+.message-content :deep(strong) {
+  font-weight: 600;
+  color: #303133;
+}
+
+.message-content :deep(em) {
+  font-style: italic;
+  color: #606266;
+}
+
+.message-content :deep(code) {
+  background: #f5f7fa;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
+  color: #e6a23c;
+}
+
+.message-content :deep(pre) {
+  background: #f5f7fa;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.message-content :deep(pre code) {
+  background: none;
+  padding: 0;
+  color: #303133;
+}
+
+.message-content :deep(blockquote) {
+  border-left: 3px solid #9dddd8ff;
+  padding-left: 12px;
+  margin: 0.5em 0;
+  color: #606266;
+}
+
+.message-content :deep(a) {
+  color: #409eff;
+  text-decoration: none;
+}
+
+.message-content :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.message-content :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.message-content :deep(th), .message-content :deep(td) {
+  border: 1px solid #ebeef5;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.message-content :deep(th) {
+  background: #f5f7fa;
+  font-weight: 600;
+}
+
+.message-content :deep(hr) {
+  border: none;
+  border-top: 1px solid #ebeef5;
+  margin: 1em 0;
 }
 
 .typing-indicator {

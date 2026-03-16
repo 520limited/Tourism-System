@@ -257,7 +257,7 @@ const loadUserInfo = async () => {
 const loadStats = async () => {
   try {
     const [tripsRes, favoritesRes] = await Promise.all([
-      tripAPI.getUserTrips({ page: 1, pageSize: 1 }),
+      tripAPI.getTrips({ page: 1, pageSize: 1 }),
       fetch('/api/favorites', {
         headers: { 'X-Session-Id': localStorage.getItem('sessionId') || '' }
       }).then(r => r.json())

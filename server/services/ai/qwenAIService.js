@@ -17,11 +17,17 @@ class QwenAIService {
    * 处理用户自然语言输入，直接生成行程（优化版：精简prompt，提速）
    */
   async generateTripFromNaturalLanguage(userMessage, conversationHistory = []) {
-    const systemPrompt = `你是长沙旅游规划专家"小沙"。根据用户需求直接生成完整行程，返回JSON格式。
+    const systemPrompt = `你是长沙旅游规划专家"小沙"。你必须直接生成完整行程，不要先确认需求，不要问问题，直接根据用户输入生成行程。
 
-【输出格式】
+【重要规则】
+1. 无论用户输入多么复杂或信息不足，都必须直接生成行程
+2. 如果信息不足，自动补充合理的默认值
+3. 永远不要回复"请再说一次"或"正在为您生成"等确认消息
+4. 直接返回JSON格式的完整行程
+
+【输出格式】必须严格遵循：
 {
-  "message": "行程概述",
+  "message": "为您生成了X天行程，包含...",
   "requirements": {"days":3,"crowd":"情侣","budget":"1000-2000","interests":["美食"],"foodPreferences":["臭豆腐"],"hotelArea":"五一广场"},
   "activities": ["摄影交流","当地文化体验"],
   "itinerary": [{
@@ -80,6 +86,9 @@ class QwenAIService {
       if (jsonMatch) {
         let jsonStr = jsonMatch[0];
         
+        // 预处理：修复中文引号和其他常见问题
+        jsonStr = this.preprocessJSON(jsonStr);
+        
         // 尝试解析JSON
         try {
           const data = JSON.parse(jsonStr);
@@ -104,6 +113,7 @@ class QwenAIService {
         } catch (parseError) {
           // JSON解析失败，尝试修复
           logger.warn(`JSON解析失败，尝试修复: ${parseError.message}`);
+          logger.warn(`问题位置附近内容: ${jsonStr.substring(Math.max(0, 270), 300)}`);
           
           // 尝试修复常见的JSON错误
           jsonStr = this.fixJSON(jsonStr);
@@ -140,6 +150,55 @@ class QwenAIService {
   }
 
   /**
+   * 预处理JSON字符串
+   */
+  preprocessJSON(jsonStr) {
+    // 1. 替换中文引号为英文引号
+    jsonStr = jsonStr.replace(/[""]/g, '"');
+    
+    // 2. 替换中文冒号为英文冒号
+    jsonStr = jsonStr.replace(/：/g, ':');
+    
+    // 3. 替换中文逗号为英文逗号（在JSON结构中）
+    // 注意：不要替换字符串内部的中文逗号
+    let result = '';
+    let inString = false;
+    let escaped = false;
+    
+    for (let i = 0; i < jsonStr.length; i++) {
+      const char = jsonStr[i];
+      
+      if (!inString) {
+        if (char === '"') {
+          inString = true;
+        }
+        // 在JSON结构中替换中文逗号
+        if (char === '，') {
+          result += ',';
+        } else {
+          result += char;
+        }
+      } else {
+        if (escaped) {
+          result += char;
+          escaped = false;
+        } else if (char === '\\') {
+          result += char;
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+          result += char;
+        } else {
+          // 字符串内部保持原样
+          result += char;
+        }
+      }
+    }
+    
+    return result;
+  }
+
+  /**
    * 修复常见的JSON格式错误
    */
   fixJSON(jsonStr) {
@@ -164,6 +223,12 @@ class QwenAIService {
     
     // 保护已经转义的字符
     jsonStr = jsonStr.replace(/\\"/g, (match) => {
+      protectedChars.push(match);
+      return placeholder + (protectedChars.length - 1) + placeholder;
+    });
+    
+    // 保护 Unicode 转义序列
+    jsonStr = jsonStr.replace(/\\u[0-9a-fA-F]{4}/g, (match) => {
       protectedChars.push(match);
       return placeholder + (protectedChars.length - 1) + placeholder;
     });
@@ -231,6 +296,19 @@ class QwenAIService {
     jsonStr = jsonStr.replace(/(\d)(\s*")/g, '$1,$2');
     jsonStr = jsonStr.replace(/(\d)(\s*{)/g, '$1,$2');
     jsonStr = jsonStr.replace(/(\d)(\s*\[)/g, '$1,$2');
+    
+    // 9. 修复属性名中包含特殊字符的情况
+    jsonStr = jsonStr.replace(/"([^"]*)":\s*"([^"]*)"/g, (match, key, value) => {
+      // 清理 key 中的特殊字符
+      const cleanKey = key.replace(/[\n\r\t]/g, '');
+      // 清理 value 中的特殊字符
+      const cleanValue = value.replace(/[\n\r\t]/g, '');
+      return `"${cleanKey}": "${cleanValue}"`;
+    });
+    
+    // 10. 只修复明显错误的数字格式（如多余的引号）
+    // 修复类似 "latitude": "28.1234" 应该 latitude: 28.1234 的情况
+    jsonStr = jsonStr.replace(/"(-?\d+\.\d+)"/g, (match, num) => num);
     
     logger.info(`JSON修复完成，新长度: ${jsonStr.length}`);
     

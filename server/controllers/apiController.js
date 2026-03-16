@@ -316,55 +316,58 @@ router.post('/chat', async (req, res) => {
 
     session.history.push({ role: 'user', content: message });
 
-    // 调用AI对话
-    const chatResult = await qwenAIService.chat(message, session.history);
+    // 直接调用AI生成行程（一次性返回标签+行程）
+    const aiResult = await qwenAIService.generateTripFromNaturalLanguage(
+      message,
+      session.history
+    );
 
-    session.history.push({ role: 'assistant', content: chatResult.message });
+    session.history.push({ role: 'assistant', content: aiResult.message });
 
-    // 如果AI建议重新生成行程
-    if (chatResult.adjustmentType === 'all') {
-      // 更新需求
-      session.requirements = { ...session.requirements, ...chatResult.requirements };
+    if (aiResult.ready && aiResult.itinerary && aiResult.itinerary.length > 0) {
+      // 验证并修正行程中的所有地点坐标
+      const verifiedItinerary = await locationVerifyService.verifyItinerary(aiResult.itinerary);
       
-      // 重新生成行程
-      const aiResult = await qwenAIService.generateTripFromNaturalLanguage(
-        `基于之前的对话，重新生成行程。新要求：${JSON.stringify(session.requirements)}`,
-        session.history
-      );
+      session.itinerary = verifiedItinerary;
+      session.requirements = aiResult.requirements;
 
-      if (aiResult.ready) {
-        // 验证并修正行程中的所有地点坐标
-        const verifiedItinerary = await locationVerifyService.verifyItinerary(aiResult.itinerary);
-        
-        session.itinerary = verifiedItinerary;
-        session.requirements = aiResult.requirements;
+      // 保存行程到数据库
+      const tripId = await tripService.saveTrip({
+        userId: req.userId || null,
+        title: `${aiResult.requirements.days || 3}天${aiResult.requirements.crowd || '游客'}长沙游`,
+        requirements: aiResult.requirements,
+        itinerary: verifiedItinerary,
+        conversationHistory: session.history
+      });
 
-        res.json({
-          code: 200,
-          data: {
-            message: aiResult.message,
-            sessionId,
-            requirements: aiResult.requirements,
-            itinerary: aiResult.itinerary,
-            ready: true
-          }
-        });
-        return;
-      }
+      sessions.set(sessionId, session);
+
+      res.json({
+        code: 200,
+        data: {
+          message: aiResult.message,
+          sessionId,
+          tripId,
+          requirements: aiResult.requirements,
+          itinerary: verifiedItinerary,
+          ready: true
+        }
+      });
+    } else {
+      // AI还在收集需求
+      sessions.set(sessionId, session);
+      
+      res.json({
+        code: 200,
+        data: {
+          message: aiResult.message,
+          sessionId,
+          requirements: aiResult.requirements || {},
+          itinerary: [],
+          ready: false
+        }
+      });
     }
-
-    sessions.set(sessionId, session);
-
-    res.json({
-      code: 200,
-      data: {
-        message: chatResult.message,
-        sessionId,
-        requirements: session.requirements,
-        itinerary: session.itinerary,
-        ready: session.itinerary.length > 0
-      }
-    });
   } catch (error) {
     logger.error(`Chat error: ${error.message}`);
     res.status(500).json({ code: 500, message: error.message || '服务处理失败' });
