@@ -260,6 +260,16 @@ router.post('/plan', async (req, res) => {
       comfort: aiResult.requirements.crowd === '情侣' || aiResult.requirements.crowd === '家庭'
     });
 
+    // 将交通数据合并到行程中
+    if (enhancedPlanning.transports) {
+      enhancedPlanning.transports.forEach(dayTransport => {
+        const day = verifiedItinerary.find(d => d.day === dayTransport.day);
+        if (day) {
+          day.transports = dayTransport.routes;
+        }
+      });
+    }
+
     // 保存会话
     session.requirements = aiResult.requirements;
     session.itinerary = verifiedItinerary;

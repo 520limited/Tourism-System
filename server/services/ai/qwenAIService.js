@@ -41,7 +41,7 @@ class QwenAIService {
 
     const systemPrompt = `你是长沙旅游规划专家。直接返回JSON行程，不要确认。
 ${weatherInfo}${preferencePrompt}${datePrompt}
-雨天优先室内景点（博物馆、商场），晴天可户外。
+雨天优先室内景点（如博物馆、商场），晴天可户外（所有地点只限长沙）。
 ${preferencePrompt ? '根据用户偏好画像调整推荐内容，优先推荐用户偏好的景点类型、菜系和酒店档次。' : ''}
 
 返回格式：

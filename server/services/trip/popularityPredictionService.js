@@ -121,6 +121,15 @@ class PopularityPredictionService {
     this.holidays = holidays2025;
   }
 
+  findAttractionProfileSync(attractionName, attractionData = null) {
+    for (const [key, profile] of Object.entries(this.attractionProfiles)) {
+      if (attractionName.includes(key) || key.includes(attractionName)) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
   async findAttractionProfile(attractionName, attractionData = null) {
     try {
       const dynamicProfile = await dynamicPopularityService.getAttractionProfile(attractionName, attractionData);
@@ -132,17 +141,11 @@ class PopularityPredictionService {
       logger.warn(`动态热度获取失败: ${e.message}`);
     }
 
-    for (const [key, profile] of Object.entries(this.attractionProfiles)) {
-      if (attractionName.includes(key) || key.includes(attractionName)) {
-        return profile;
-      }
-    }
-
-    return null;
+    return this.findAttractionProfileSync(attractionName, attractionData);
   }
 
   predictCrowdLevel(attractionName, date, hour, attractionData = null) {
-    const profile = this.findAttractionProfile(attractionName, attractionData);
+    const profile = this.findAttractionProfileSync(attractionName, attractionData);
     if (!profile) {
       return this.getDefaultPrediction(date, hour);
     }
@@ -295,7 +298,7 @@ class PopularityPredictionService {
   estimateVisitDuration(attractionName, options = {}) {
     const { crowdLevel = 0.5, groupType = 'couple', withKids = false, withElderly = false } = options;
     
-    const profile = this.findAttractionProfile(attractionName);
+    const profile = this.findAttractionProfileSync(attractionName);
     if (!profile) {
       const defaultDuration = 120;
       return {

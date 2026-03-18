@@ -105,6 +105,8 @@ class SmartPlanningService {
     const hasLuggage = preferences.hasLuggage || false;
     const isRushHour = this.isRushHour();
 
+    logger.info(`交通推荐: ${from.name} -> ${to.name}, 距离: ${Math.round(distance)}米`);
+
     let recommendations = [];
 
     if (distance <= this.transportThresholds.walk && weather !== 'rainy' && !hasLuggage) {
@@ -258,7 +260,9 @@ class SmartPlanningService {
           const to = day.attractions[i + 1];
           
           if (from?.latitude && to?.latitude) {
+            logger.info(`计算交通: ${from.name} -> ${to.name}`);
             const transport = await this.recommendTransportation(from, to, preferences);
+            logger.info(`交通推荐结果: ${JSON.stringify(transport)}`);
             if (transport && transport.length > 0) {
               dayTransports.push({
                 from: from.name,
@@ -277,6 +281,7 @@ class SmartPlanningService {
           });
           
           day.transports = dayTransports;
+          logger.info(`第${day.day}天交通数据: ${dayTransports.length}条`);
         }
       }
     }

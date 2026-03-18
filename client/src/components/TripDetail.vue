@@ -130,8 +130,7 @@
                   </div>
                   <div v-if="attr.smartDuration" class="smart-duration">
                     <el-icon><Clock /></el-icon>
-                    <span>预估时长: {{ attr.smartDuration.estimated }}分钟</span>
-                    <span class="duration-range">({{ attr.smartDuration.min }}-{{ attr.smartDuration.max }}分钟)</span>
+                    <span>预估时长: {{ attr.smartDuration.min }}-{{ attr.smartDuration.max }}分钟</span>
                   </div>
                   <div v-if="attr.suggestedTime && attr.crowdPrediction?.level > 0.7" class="suggestion-tip">
                     <el-icon><Warning /></el-icon>
