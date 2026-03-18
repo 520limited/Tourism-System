@@ -157,6 +157,19 @@
                   @click.stop="toggleFavorite('attraction', attr)"
                 />
               </div>
+              <div v-if="dayTrip.transports && attrIdx < dayTrip.transports.length" class="transport-info">
+                <div class="transport-card">
+                  <span class="transport-icon">{{ dayTrip.transports[attrIdx].best?.icon || '🚶' }}</span>
+                  <span class="transport-name">{{ dayTrip.transports[attrIdx].best?.name || '步行' }}</span>
+                  <span class="transport-duration" v-if="dayTrip.transports[attrIdx].best?.duration">
+                    约{{ dayTrip.transports[attrIdx].best.duration }}分钟
+                  </span>
+                  <span class="transport-distance" v-if="dayTrip.transports[attrIdx].best?.distance">
+                    {{ dayTrip.transports[attrIdx].best.distance }}米
+                  </span>
+                  <span class="transport-reason">{{ dayTrip.transports[attrIdx].best?.reason }}</span>
+                </div>
+              </div>
             </div>
 
             <div v-if="dayTrip.restaurants && dayTrip.restaurants.length > 0" class="day-restaurants">
@@ -356,7 +369,7 @@ import { useTripStore } from '../stores/trip'
 import { useMapStore } from '../stores/map'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { planAPI, preferenceAPI, popularityAPI } from '../api'
-import { Sunny, Location, Clock, Star, Ticket, Food, MapLocation, Collection, Loading, House, Refresh, Warning, StarFilled } from '@element-plus/icons-vue'
+import { Sunny, Location, Clock, Star, Ticket, Food, MapLocation, Collection, Loading, House, Refresh, Warning, StarFilled, Check } from '@element-plus/icons-vue'
 
 const tripStore = useTripStore()
 const mapStore = useMapStore()
@@ -1104,6 +1117,66 @@ const printTrip = async () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.optimization-info {
+  margin-bottom: 12px;
+}
+
+.optimization-info :deep(.el-alert) {
+  padding: 8px 12px;
+}
+
+.optimization-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.opt-item {
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.transport-info {
+  padding: 8px 12px;
+  margin: 0 12px;
+}
+
+.transport-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #f0f9eb 0%, #e1f3d8 100%);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.transport-icon {
+  font-size: 18px;
+}
+
+.transport-name {
+  font-weight: 600;
+  color: #67c23a;
+}
+
+.transport-duration {
+  color: #909399;
+}
+
+.transport-distance {
+  color: #909399;
+  font-size: 12px;
+}
+
+.transport-reason {
+  color: #606266;
+  margin-left: auto;
+  font-size: 12px;
 }
 
 .daily-trips :deep(.el-tabs) {

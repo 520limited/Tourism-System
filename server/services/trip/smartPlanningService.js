@@ -97,9 +97,9 @@ class SmartPlanningService {
 
   /**
    * 智能交通推荐
-   * 基于距离计算，不依赖固定数据
+   * 基于距离计算，检查地铁站可用性
    */
-  recommendTransportation(from, to, preferences = {}) {
+  async recommendTransportation(from, to, preferences = {}) {
     const distance = this.calculateDistance(from, to);
     const weather = preferences.weather || 'sunny';
     const hasLuggage = preferences.hasLuggage || false;
@@ -113,6 +113,7 @@ class SmartPlanningService {
         name: '步行',
         duration: Math.round(distance / 80),
         cost: 0,
+        distance: Math.round(distance),
         reason: '距离较近，步行可欣赏沿途风景',
         icon: '🚶'
       });
@@ -124,34 +125,94 @@ class SmartPlanningService {
         name: '骑行',
         duration: Math.round(distance / 200),
         cost: 2,
+        distance: Math.round(distance),
         reason: '共享单车，灵活便捷',
         icon: '🚴'
       });
     }
 
-    recommendations.push({
-      mode: 'subway',
-      name: '地铁',
-      duration: Math.round(distance / 500) + 10,
-      cost: 4,
-      reason: '准时快速，不受交通拥堵影响',
-      icon: '🚇'
-    });
+    let subwayInfo = null;
+    if (from?.latitude && from?.longitude && to?.latitude && to?.longitude) {
+      subwayInfo = await amapService.checkSubwayAvailable(
+        { lat: from.latitude, lng: from.longitude },
+        { lat: to.latitude, lng: to.longitude }
+      );
+    }
+
+    if (subwayInfo && subwayInfo.fromAvailable && subwayInfo.toAvailable) {
+      const fromStation = subwayInfo.fromStation;
+      const toStation = subwayInfo.toStation;
+      const walkToStation = fromStation ? parseInt(fromStation.distance) : 0;
+      const walkFromStation = toStation ? parseInt(toStation.distance) : 0;
+      const totalWalk = walkToStation + walkFromStation;
+      
+      recommendations.push({
+        mode: 'subway',
+        name: '地铁',
+        duration: Math.round(distance / 500) + 15 + Math.round(totalWalk / 80),
+        cost: 2,
+        distance: Math.round(distance),
+        reason: `${fromStation?.name || '附近站'} → ${toStation?.name || '目的地站'}，准时可靠`,
+        icon: '🚇',
+        fromStation: fromStation?.name,
+        toStation: toStation?.name,
+        walkToStation: walkToStation,
+        walkFromStation: walkFromStation
+      });
+    } else if (subwayInfo) {
+      if (!subwayInfo.fromAvailable && !subwayInfo.toAvailable) {
+        recommendations.push({
+          mode: 'subway',
+          name: '地铁',
+          duration: null,
+          cost: null,
+          distance: Math.round(distance),
+          reason: '起点和终点附近暂无地铁站',
+          icon: '🚇',
+          unavailable: true
+        });
+      } else if (!subwayInfo.fromAvailable) {
+        recommendations.push({
+          mode: 'subway',
+          name: '地铁',
+          duration: null,
+          cost: null,
+          distance: Math.round(distance),
+          reason: '起点附近暂无地铁站',
+          icon: '🚇',
+          unavailable: true
+        });
+      } else {
+        recommendations.push({
+          mode: 'subway',
+          name: '地铁',
+          duration: null,
+          cost: null,
+          distance: Math.round(distance),
+          reason: '终点附近暂无地铁站',
+          icon: '🚇',
+          unavailable: true
+        });
+      }
+    }
 
     recommendations.push({
       mode: 'taxi',
       name: isRushHour ? '网约车（可能拥堵）' : '网约车',
       duration: Math.round(distance / 300) + 5,
       cost: Math.max(10, Math.round(distance / 1000 * 2.5)),
-      reason: isRushHour ? '高峰期可能拥堵，建议地铁' : '直达目的地，舒适便捷',
+      distance: Math.round(distance),
+      reason: isRushHour ? '高峰期可能拥堵' : '直达目的地，舒适便捷',
       icon: '🚗'
     });
 
-    return recommendations.sort((a, b) => {
-      const scoreA = this.calculateTransportScore(a, preferences);
-      const scoreB = this.calculateTransportScore(b, preferences);
-      return scoreB - scoreA;
-    });
+    return recommendations
+      .filter(r => !r.unavailable)
+      .sort((a, b) => {
+        const scoreA = this.calculateTransportScore(a, preferences);
+        const scoreB = this.calculateTransportScore(b, preferences);
+        return scoreB - scoreA;
+      });
   }
 
   calculateTransportScore(transport, preferences) {
@@ -176,7 +237,7 @@ class SmartPlanningService {
 
   /**
    * 生成完整增强行程
-   * 只使用传入的实时数据，不添加固定内容
+   * 包含路线优化和交通方式推荐
    */
   async enhanceItinerary(itinerary, preferences = {}) {
     logger.info('开始增强行程规划...');
@@ -184,26 +245,42 @@ class SmartPlanningService {
     const enhanced = {
       original: itinerary,
       optimizations: [],
-      tips: []
+      tips: [],
+      transports: []
     };
 
-    // 1. 路线优化（基于坐标）
-    itinerary.forEach(day => {
-      if (day.attractions && day.attractions.length > 2) {
-        const optimization = this.optimizeRoute(day.attractions);
-        day.attractions = optimization.route;
-        if (optimization.savedDistance > 0) {
-          enhanced.optimizations.push({
+    for (const day of itinerary) {
+      if (day.attractions && day.attractions.length > 1) {
+        const dayTransports = [];
+        
+        for (let i = 0; i < day.attractions.length - 1; i++) {
+          const from = day.attractions[i];
+          const to = day.attractions[i + 1];
+          
+          if (from?.latitude && to?.latitude) {
+            const transport = await this.recommendTransportation(from, to, preferences);
+            if (transport && transport.length > 0) {
+              dayTransports.push({
+                from: from.name,
+                to: to.name,
+                recommendations: transport,
+                best: transport[0]
+              });
+            }
+          }
+        }
+        
+        if (dayTransports.length > 0) {
+          enhanced.transports.push({
             day: day.day,
-            type: 'route',
-            savedDistance: optimization.savedDistance,
-            savedTime: optimization.savedTime
+            routes: dayTransports
           });
+          
+          day.transports = dayTransports;
         }
       }
-    });
+    }
 
-    // 2. 预算优化（基于实际传入的价格数据）
     if (preferences.budget) {
       enhanced.budgetOptimization = this.optimizeBudget(itinerary, preferences.budget);
     }

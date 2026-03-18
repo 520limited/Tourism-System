@@ -17,6 +17,7 @@ export const useTripStore = defineStore('trip', () => {
   const conversationHistory = ref([])
   const routes = ref([])
   const activities = ref([])
+  const enhancedPlanning = ref(null)
 
   const updateTripParams = (params) => {
     tripParams.value = { ...tripParams.value, ...params }
@@ -55,6 +56,10 @@ export const useTripStore = defineStore('trip', () => {
     activities.value = data
   }
 
+  const setEnhancedPlanning = (data) => {
+    enhancedPlanning.value = data
+  }
+
   const addRoute = (route) => {
     routes.value.push(route)
   }
@@ -73,6 +78,7 @@ export const useTripStore = defineStore('trip', () => {
     integratedData.value = null
     conversationHistory.value = []
     routes.value = []
+    enhancedPlanning.value = null
   }
 
   const loadTripData = (tripData) => {
@@ -176,6 +182,8 @@ export const useTripStore = defineStore('trip', () => {
     integratedData,
     conversationHistory,
     routes,
+    activities,
+    enhancedPlanning,
     updateTripParams,
     setItinerary,
     setTripId,
@@ -183,6 +191,8 @@ export const useTripStore = defineStore('trip', () => {
     setConversationHistory,
     addConversationMessage,
     setRoutes,
+    setActivities,
+    setEnhancedPlanning,
     addRoute,
     resetTrip,
     loadTripData,

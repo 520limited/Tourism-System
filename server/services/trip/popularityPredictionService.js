@@ -297,9 +297,12 @@ class PopularityPredictionService {
     
     const profile = this.findAttractionProfile(attractionName);
     if (!profile) {
+      const defaultDuration = 120;
       return {
-        baseDuration: 120,
-        estimatedDuration: 120,
+        baseDuration: defaultDuration,
+        estimatedDuration: defaultDuration,
+        minDuration: Math.round(defaultDuration * 0.8),
+        maxDuration: Math.round(defaultDuration * 1.3),
         factors: ['使用默认估算']
       };
     }

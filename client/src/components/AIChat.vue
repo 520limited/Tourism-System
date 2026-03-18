@@ -405,6 +405,10 @@ const sendMessageWithValue = async (text) => {
           if (res.data.integratedData) {
             tripStore.setIntegratedData(res.data.integratedData)
           }
+          
+          if (res.data.enhancedPlanning) {
+            tripStore.setEnhancedPlanning(res.data.enhancedPlanning)
+          }
         } else if (res.data.ready && (!res.data.itinerary || res.data.itinerary.length === 0)) {
           // 行程为空，给出提示
           ElMessage.warning('行程生成失败，请提供更多详细的旅游需求信息')

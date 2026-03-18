@@ -371,6 +371,55 @@ class AmapService {
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  async searchNearbySubwayStation(lat, lng, radius = 1500) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/place/around`, {
+        params: {
+          key: this.key,
+          location: `${lng},${lat}`,
+          keywords: '地铁站',
+          types: '150500',
+          radius: radius,
+          city: '长沙',
+          offset: 3,
+          extensions: 'base'
+        },
+        timeout: 20000
+      });
+
+      if (response.data.status === '1' && response.data.pois && response.data.pois.length > 0) {
+        return response.data.pois.map(poi => {
+          const location = poi.location ? poi.location.split(',') : ['0', '0'];
+          return {
+            name: poi.name,
+            distance: poi.distance,
+            latitude: parseFloat(location[1]) || 0,
+            longitude: parseFloat(location[0]) || 0,
+            address: poi.address || ''
+          };
+        });
+      }
+      return [];
+    } catch (error) {
+      logger.error(`搜索地铁站失败: ${error.message}`);
+      return [];
+    }
+  }
+
+  async checkSubwayAvailable(from, to) {
+    const [fromStations, toStations] = await Promise.all([
+      this.searchNearbySubwayStation(from.lat, from.lng),
+      this.searchNearbySubwayStation(to.lat, to.lng)
+    ]);
+
+    return {
+      fromAvailable: fromStations.length > 0,
+      toAvailable: toStations.length > 0,
+      fromStation: fromStations[0] || null,
+      toStation: toStations[0] || null
+    };
+  }
 }
 
 module.exports = new AmapService();
