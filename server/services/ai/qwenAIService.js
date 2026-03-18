@@ -35,7 +35,7 @@ ${weatherInfo}
 返回格式：
 {"message":"行程简介","requirements":{"days":3,"crowd":"情侣","budget":"1000-2000","interests":["美食"],"hotelArea":"五一广场"},"activities":["特殊活动"],"itinerary":[{"day":1,"title":"第一天","attractions":[{"name":"景点名","type":"类型","rating":4.8,"description":"描述","address":"地址","latitude":28.17,"longitude":112.96,"ticketPrice":0,"estimatedDuration":2,"bestTime":"上午"}],"restaurants":[{"name":"餐厅名","cuisine":"湘菜","rating":4.7,"avgPrice":80,"address":"地址","latitude":28.19,"longitude":112.97,"specialty":"招牌菜"}],"hotels":[{"name":"酒店名","starRating":3,"rating":4.5,"pricePerNight":280,"address":"地址","latitude":28.19,"longitude":112.97}]}]}
 
-规则：每天3景点3餐厅3酒店；坐标准确价格真实；就近安排；提取用户特殊活动到activities字段`;
+规则：每天至少3景点（优先根据用户需求理解），3餐厅3酒店随机；坐标准确价格真实；就近安排；提取用户特殊活动到activities字段`;
 
     const messages = [
       { role: 'system', content: systemPrompt },

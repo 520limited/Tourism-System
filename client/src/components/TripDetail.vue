@@ -63,27 +63,6 @@
       </div>
     </div>
 
-    <div v-if="tripStore.activities && tripStore.activities.length > 0" class="special-activities">
-      <div class="section-header">
-        <div class="section-title">
-          <el-icon><Star /></el-icon>
-          特殊活动
-        </div>
-      </div>
-      <div class="activities-list">
-        <el-tag 
-          v-for="(activity, idx) in tripStore.activities" 
-          :key="idx" 
-          type="warning" 
-          size="large"
-          effect="dark"
-          style="margin: 4px;"
-        >
-          {{ activity }}
-        </el-tag>
-      </div>
-    </div>
-
     <div v-if="hasItinerary" class="daily-trips">
       <el-tabs v-model="activeDay" type="border-card" @tab-change="handleDayChange">
         <el-tab-pane
@@ -277,6 +256,30 @@
             <div v-if="dayTrip.weatherAdvice" class="weather-advice">
               <el-icon><Sunny /></el-icon>
               {{ dayTrip.weatherAdvice }}
+            </div>
+
+            <div class="day-activities">
+              <div class="section-header">
+                <div class="section-title">
+                  <el-icon><Star /></el-icon>
+                  特殊活动
+                </div>
+              </div>
+              <div class="activities-list">
+                <template v-if="tripStore.activities && tripStore.activities.length > 0">
+                  <el-tag 
+                    v-for="(activity, idx) in tripStore.activities" 
+                    :key="idx" 
+                    type="warning" 
+                    size="large"
+                    effect="dark"
+                    style="margin: 4px;"
+                  >
+                    {{ activity }}
+                  </el-tag>
+                </template>
+                <span v-else class="no-activities">暂无特殊活动安排</span>
+              </div>
             </div>
           </div>
           
@@ -1049,7 +1052,8 @@ const printTrip = async () => {
 
 .day-attractions,
 .day-restaurants,
-.day-hotels {
+.day-hotels,
+.day-activities {
   flex-shrink: 0;
 }
 
@@ -1293,6 +1297,39 @@ const printTrip = async () => {
 
 .day-hotels {
   margin-bottom: 20px;
+}
+
+.day-activities {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: linear-gradient(135deg, #fff7e6 0%, #ffecd2 100%);
+  border-radius: 8px;
+  border: 1px solid #ffd591;
+}
+
+.day-activities .section-header {
+  margin-bottom: 12px;
+}
+
+.day-activities .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6a23c;
+}
+
+.day-activities .activities-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.no-activities {
+  color: #909399;
+  font-size: 13px;
+  font-style: italic;
 }
 
 .hotel-list {
