@@ -1,138 +1,162 @@
 const { dbRun, dbGet, dbAll } = require('../../database/db');
 const logger = require('../logger');
+const dynamicPopularityService = require('./dynamicPopularityService');
+
+const defaultProfiles = {
+  '橘子洲': {
+    basePopularity: 0.85,
+    peakHours: [10, 11, 14, 15, 16],
+    lowHours: [7, 8, 17, 18],
+    weekendMultiplier: 1.4,
+    holidayMultiplier: 1.8,
+    avgVisitDuration: 180,
+    areaSize: 'large',
+    indoorRatio: 0.1
+  },
+  '岳麓山': {
+    basePopularity: 0.80,
+    peakHours: [9, 10, 14, 15],
+    lowHours: [7, 8, 16, 17, 18],
+    weekendMultiplier: 1.5,
+    holidayMultiplier: 2.0,
+    avgVisitDuration: 240,
+    areaSize: 'large',
+    indoorRatio: 0.05
+  },
+  '湖南省博物馆': {
+    basePopularity: 0.90,
+    peakHours: [10, 11, 13, 14],
+    lowHours: [9, 15, 16],
+    weekendMultiplier: 1.6,
+    holidayMultiplier: 2.2,
+    avgVisitDuration: 180,
+    areaSize: 'medium',
+    indoorRatio: 1.0,
+    reservationRequired: true
+  },
+  '太平老街': {
+    basePopularity: 0.75,
+    peakHours: [18, 19, 20, 21],
+    lowHours: [9, 10, 11, 22],
+    weekendMultiplier: 1.8,
+    holidayMultiplier: 2.5,
+    avgVisitDuration: 90,
+    areaSize: 'small',
+    indoorRatio: 0.3
+  },
+  'IFS国金中心': {
+    basePopularity: 0.70,
+    peakHours: [14, 15, 16, 19, 20],
+    lowHours: [10, 11, 21, 22],
+    weekendMultiplier: 1.5,
+    holidayMultiplier: 1.8,
+    avgVisitDuration: 120,
+    areaSize: 'medium',
+    indoorRatio: 1.0
+  },
+  '黄兴路步行街': {
+    basePopularity: 0.80,
+    peakHours: [18, 19, 20, 21],
+    lowHours: [9, 10, 22],
+    weekendMultiplier: 1.7,
+    holidayMultiplier: 2.3,
+    avgVisitDuration: 60,
+    areaSize: 'medium',
+    indoorRatio: 0.2
+  },
+  '岳麓书院': {
+    basePopularity: 0.65,
+    peakHours: [10, 11, 14, 15],
+    lowHours: [8, 9, 16, 17],
+    weekendMultiplier: 1.3,
+    holidayMultiplier: 1.6,
+    avgVisitDuration: 90,
+    areaSize: 'small',
+    indoorRatio: 0.6
+  },
+  '杜甫江阁': {
+    basePopularity: 0.55,
+    peakHours: [19, 20, 21],
+    lowHours: [9, 10, 11, 14, 15],
+    weekendMultiplier: 1.4,
+    holidayMultiplier: 1.7,
+    avgVisitDuration: 45,
+    areaSize: 'small',
+    indoorRatio: 0.3
+  },
+  '世界之窗': {
+    basePopularity: 0.75,
+    peakHours: [10, 11, 13, 14, 15],
+    lowHours: [9, 16, 17],
+    weekendMultiplier: 1.6,
+    holidayMultiplier: 2.5,
+    avgVisitDuration: 360,
+    areaSize: 'large',
+    indoorRatio: 0.2
+  },
+  '烈士公园': {
+    basePopularity: 0.50,
+    peakHours: [7, 8, 18, 19],
+    lowHours: [10, 11, 14, 15, 16],
+    weekendMultiplier: 1.3,
+    holidayMultiplier: 1.5,
+    avgVisitDuration: 90,
+    areaSize: 'large',
+    indoorRatio: 0.0
+  }
+};
+
+const holidays2025 = [
+  { date: '2025-01-01', name: '元旦' },
+  { date: '2025-01-28', name: '春节', duration: 7 },
+  { date: '2025-04-04', name: '清明节', duration: 3 },
+  { date: '2025-05-01', name: '劳动节', duration: 5 },
+  { date: '2025-05-31', name: '端午节', duration: 3 },
+  { date: '2025-10-01', name: '国庆节', duration: 7 }
+];
 
 class PopularityPredictionService {
   constructor() {
-    this.attractionProfiles = {
-      '橘子洲': {
-        basePopularity: 0.85,
-        peakHours: [10, 11, 14, 15, 16],
-        lowHours: [7, 8, 17, 18],
-        weekendMultiplier: 1.4,
-        holidayMultiplier: 1.8,
-        avgVisitDuration: 180,
-        areaSize: 'large',
-        indoorRatio: 0.1
-      },
-      '岳麓山': {
-        basePopularity: 0.80,
-        peakHours: [9, 10, 14, 15],
-        lowHours: [7, 8, 16, 17, 18],
-        weekendMultiplier: 1.5,
-        holidayMultiplier: 2.0,
-        avgVisitDuration: 240,
-        areaSize: 'large',
-        indoorRatio: 0.05
-      },
-      '湖南省博物馆': {
-        basePopularity: 0.90,
-        peakHours: [10, 11, 13, 14],
-        lowHours: [9, 15, 16],
-        weekendMultiplier: 1.6,
-        holidayMultiplier: 2.2,
-        avgVisitDuration: 180,
-        areaSize: 'medium',
-        indoorRatio: 1.0,
-        reservationRequired: true
-      },
-      '太平老街': {
-        basePopularity: 0.75,
-        peakHours: [18, 19, 20, 21],
-        lowHours: [9, 10, 11, 22],
-        weekendMultiplier: 1.8,
-        holidayMultiplier: 2.5,
-        avgVisitDuration: 90,
-        areaSize: 'small',
-        indoorRatio: 0.3
-      },
-      'IFS国金中心': {
-        basePopularity: 0.70,
-        peakHours: [14, 15, 16, 19, 20],
-        lowHours: [10, 11, 21, 22],
-        weekendMultiplier: 1.5,
-        holidayMultiplier: 1.8,
-        avgVisitDuration: 120,
-        areaSize: 'medium',
-        indoorRatio: 1.0
-      },
-      '黄兴路步行街': {
-        basePopularity: 0.80,
-        peakHours: [18, 19, 20, 21],
-        lowHours: [9, 10, 22],
-        weekendMultiplier: 1.7,
-        holidayMultiplier: 2.3,
-        avgVisitDuration: 60,
-        areaSize: 'medium',
-        indoorRatio: 0.2
-      },
-      '岳麓书院': {
-        basePopularity: 0.65,
-        peakHours: [10, 11, 14, 15],
-        lowHours: [8, 9, 16, 17],
-        weekendMultiplier: 1.3,
-        holidayMultiplier: 1.6,
-        avgVisitDuration: 90,
-        areaSize: 'small',
-        indoorRatio: 0.6
-      },
-      '杜甫江阁': {
-        basePopularity: 0.55,
-        peakHours: [19, 20, 21],
-        lowHours: [9, 10, 11, 14, 15],
-        weekendMultiplier: 1.4,
-        holidayMultiplier: 1.7,
-        avgVisitDuration: 45,
-        areaSize: 'small',
-        indoorRatio: 0.3
-      },
-      '世界之窗': {
-        basePopularity: 0.75,
-        peakHours: [10, 11, 13, 14, 15],
-        lowHours: [9, 16, 17],
-        weekendMultiplier: 1.6,
-        holidayMultiplier: 2.5,
-        avgVisitDuration: 360,
-        areaSize: 'large',
-        indoorRatio: 0.2
-      },
-      '烈士公园': {
-        basePopularity: 0.50,
-        peakHours: [7, 8, 18, 19],
-        lowHours: [10, 11, 14, 15, 16],
-        weekendMultiplier: 1.3,
-        holidayMultiplier: 1.5,
-        avgVisitDuration: 90,
-        areaSize: 'large',
-        indoorRatio: 0.0
-      }
-    };
-
-    this.holidays2025 = [
-      { date: '2025-01-01', name: '元旦' },
-      { date: '2025-01-28', name: '春节', duration: 7 },
-      { date: '2025-04-04', name: '清明节', duration: 3 },
-      { date: '2025-05-01', name: '劳动节', duration: 5 },
-      { date: '2025-05-31', name: '端午节', duration: 3 },
-      { date: '2025-10-01', name: '国庆节', duration: 7 }
-    ];
+    this.attractionProfiles = defaultProfiles;
+    this.holidays = holidays2025;
   }
 
-  predictCrowdLevel(attractionName, date, hour) {
-    const profile = this.findAttractionProfile(attractionName);
+  async findAttractionProfile(attractionName, attractionData = null) {
+    try {
+      const dynamicProfile = await dynamicPopularityService.getAttractionProfile(attractionName, attractionData);
+      if (dynamicProfile && dynamicProfile.source !== 'default') {
+        logger.info(`使用动态热度数据: ${attractionName} (来源: ${dynamicProfile.source})`);
+        return dynamicProfile;
+      }
+    } catch (e) {
+      logger.warn(`动态热度获取失败: ${e.message}`);
+    }
+
+    for (const [key, profile] of Object.entries(this.attractionProfiles)) {
+      if (attractionName.includes(key) || key.includes(attractionName)) {
+        return profile;
+      }
+    }
+
+    return null;
+  }
+
+  predictCrowdLevel(attractionName, date, hour, attractionData = null) {
+    const profile = this.findAttractionProfile(attractionName, attractionData);
     if (!profile) {
       return this.getDefaultPrediction(date, hour);
     }
 
-    const baseLevel = profile.basePopularity;
+    const baseLevel = profile.basePopularity || profile.basePopularity === 0 ? profile.basePopularity : 0.5;
     const dateInfo = this.analyzeDate(date);
     const hourFactor = this.getHourFactor(profile, hour);
     
     let crowdLevel = baseLevel;
     
     if (dateInfo.isHoliday) {
-      crowdLevel *= profile.holidayMultiplier;
+      crowdLevel *= (profile.holidayMultiplier || 1.8);
     } else if (dateInfo.isWeekend) {
-      crowdLevel *= profile.weekendMultiplier;
+      crowdLevel *= (profile.weekendMultiplier || 1.4);
     }
     
     crowdLevel *= hourFactor;
@@ -145,18 +169,9 @@ class PopularityPredictionService {
       color: this.getCrowdColor(crowdLevel),
       description: this.getCrowdDescription(crowdLevel, profile),
       recommendation: this.getRecommendation(crowdLevel, profile, hour),
-      peakHours: profile.peakHours,
-      lowHours: profile.lowHours
+      peakHours: profile.peakHours || [10, 11, 14, 15],
+      lowHours: profile.lowHours || [8, 9, 16, 17]
     };
-  }
-
-  findAttractionProfile(name) {
-    for (const [key, profile] of Object.entries(this.attractionProfiles)) {
-      if (name.includes(key) || key.includes(name)) {
-        return profile;
-      }
-    }
-    return null;
   }
 
   getDefaultPrediction(date, hour) {
@@ -195,7 +210,7 @@ class PopularityPredictionService {
     let isHoliday = false;
     let holidayName = '';
     
-    for (const holiday of this.holidays2025) {
+    for (const holiday of this.holidays) {
       if (holiday.date === dateFormatted) {
         isHoliday = true;
         holidayName = holiday.name;
@@ -219,10 +234,13 @@ class PopularityPredictionService {
   }
 
   getHourFactor(profile, hour) {
-    if (profile.peakHours.includes(hour)) {
+    const peakHours = profile.peakHours || [];
+    const lowHours = profile.lowHours || [];
+    
+    if (peakHours.includes(hour)) {
       return 1.3;
     }
-    if (profile.lowHours.includes(hour)) {
+    if (lowHours.includes(hour)) {
       return 0.6;
     }
     return 1.0;
@@ -286,7 +304,7 @@ class PopularityPredictionService {
       };
     }
     
-    let duration = profile.avgVisitDuration;
+    let duration = profile.avgVisitDuration || 120;
     const factors = [];
     
     const crowdMultiplier = 1 + (crowdLevel * 0.5);
@@ -328,18 +346,18 @@ class PopularityPredictionService {
     duration = Math.round(duration / 5) * 5;
     
     return {
-      baseDuration: profile.avgVisitDuration,
+      baseDuration: profile.avgVisitDuration || 120,
       estimatedDuration: Math.round(duration),
       minDuration: Math.round(duration * 0.8),
       maxDuration: Math.round(duration * 1.3),
       factors,
-      indoorRatio: profile.indoorRatio,
-      reservationRequired: profile.reservationRequired
+      indoorRatio: profile.indoorRatio || 0.5,
+      reservationRequired: profile.reservationRequired || false
     };
   }
 
-  getBestVisitTime(attractionName, date) {
-    const profile = this.findAttractionProfile(attractionName);
+  getBestVisitTime(attractionName, date, attractionData = null) {
+    const profile = this.findAttractionProfile(attractionName, attractionData);
     if (!profile) {
       return {
         bestHours: [9, 10, 16, 17],
@@ -351,7 +369,7 @@ class PopularityPredictionService {
     const predictions = [];
     
     for (let hour = 8; hour <= 20; hour++) {
-      const prediction = this.predictCrowdLevel(attractionName, date, hour);
+      const prediction = this.predictCrowdLevel(attractionName, date, hour, attractionData);
       predictions.push({
         hour,
         level: prediction.level,
@@ -373,13 +391,15 @@ class PopularityPredictionService {
   }
 
   getBestTimeReason(profile, dateInfo) {
+    const lowHours = profile.lowHours || [8, 9, 16, 17];
+    
     if (dateInfo.isHoliday) {
-      return `${dateInfo.holidayName}期间人流较大，建议${profile.lowHours[0]}点前到达`;
+      return `${dateInfo.holidayName}期间人流较大，建议${lowHours[0]}点前到达`;
     }
     if (dateInfo.isWeekend) {
-      return `周末人流较多，建议选择${profile.lowHours.slice(0, 2).join('点或')}点时段`;
+      return `周末人流较多，建议选择${lowHours.slice(0, 2).join('点或')}点时段`;
     }
-    return `工作日人流适中，${profile.lowHours[0]}点-${profile.lowHours[1]}点为最佳时段`;
+    return `工作日人流适中，${lowHours[0]}点-${lowHours[1]}点为最佳时段`;
   }
 
   predictDaySchedule(attractions, date, startTime = 9) {
@@ -388,7 +408,7 @@ class PopularityPredictionService {
     
     for (const attraction of attractions) {
       const name = attraction.name;
-      const crowdPrediction = this.predictCrowdLevel(name, date, currentTime);
+      const crowdPrediction = this.predictCrowdLevel(name, date, currentTime, attraction);
       const durationEstimate = this.estimateVisitDuration(name, {
         crowdLevel: crowdPrediction.level,
         groupType: attraction.groupType || 'couple'
@@ -430,12 +450,12 @@ class PopularityPredictionService {
       
       for (let i = 0; i < remainingAttractions.length; i++) {
         const attraction = remainingAttractions[i];
-        const profile = this.findAttractionProfile(attraction.name);
+        const profile = this.findAttractionProfile(attraction.name, attraction);
         
         for (const slot of timeSlots) {
           if (!slot.available) continue;
           
-          const prediction = this.predictCrowdLevel(attraction.name, date, slot.hour);
+          const prediction = this.predictCrowdLevel(attraction.name, date, slot.hour, attraction);
           
           if (avoidHighCrowd && prediction.level > 0.8) continue;
           

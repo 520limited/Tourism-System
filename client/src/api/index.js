@@ -121,7 +121,8 @@ export const userAPI = {
   getProfile: () => api.get('/user/profile'),
   updateProfile: (data) => api.put('/user/profile', data),
   updatePreferences: (preferences) => api.put('/user/preferences', { preferences }),
-  changePassword: (oldPassword, newPassword) => api.put('/user/password', { oldPassword, newPassword })
+  changePassword: (oldPassword, newPassword) => api.put('/user/password', { oldPassword, newPassword }),
+  getStats: () => api.get('/user/stats')
 }
 
 export const favoriteAPI = {

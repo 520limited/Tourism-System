@@ -215,8 +215,8 @@ const initBarChart = () => {
       itemStyle: {
         borderRadius: [4, 4, 0, 0],
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#667eea' },
-          { offset: 1, color: '#764ba2' }
+          { offset: 0, color: '#9dddd8' },
+          { offset: 1, color: '#5fb5af' }
         ])
       }
     }]

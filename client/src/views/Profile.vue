@@ -194,7 +194,9 @@ const stats = reactive({
   totalTrips: 0,
   favoriteAttractions: 0,
   favoriteRestaurants: 0,
-  favoriteHotels: 0
+  favoriteHotels: 0,
+  crowdTypes: {},
+  monthlyTrips: {}
 })
 
 const totalFavorites = computed(() => 
@@ -206,8 +208,8 @@ const dashboardStats = computed(() => ({
   favoriteCount: totalFavorites.value,
   totalAttractions: stats.favoriteAttractions,
   totalRestaurants: stats.favoriteRestaurants,
-  crowdTypes: {},
-  monthlyTrips: {}
+  crowdTypes: stats.crowdTypes,
+  monthlyTrips: stats.monthlyTrips
 }))
 
 const editForm = reactive({
@@ -268,11 +270,12 @@ const loadUserInfo = async () => {
 
 const loadStats = async () => {
   try {
-    const [tripsRes, favoritesRes] = await Promise.all([
+    const [tripsRes, favoritesRes, statsRes] = await Promise.all([
       tripAPI.getTrips({ page: 1, pageSize: 1 }),
       fetch('/api/favorites', {
         headers: { 'X-Session-Id': localStorage.getItem('sessionId') || '' }
-      }).then(r => r.json())
+      }).then(r => r.json()),
+      userAPI.getStats()
     ])
     
     if (tripsRes.code === 200) {
@@ -283,6 +286,11 @@ const loadStats = async () => {
       stats.favoriteAttractions = favoritesRes.data.attractions?.length || 0
       stats.favoriteRestaurants = favoritesRes.data.restaurants?.length || 0
       stats.favoriteHotels = favoritesRes.data.hotels?.length || 0
+    }
+    
+    if (statsRes.code === 200 && statsRes.data) {
+      stats.crowdTypes = statsRes.data.crowdTypes || {}
+      stats.monthlyTrips = statsRes.data.monthlyTrips || {}
     }
   } catch (error) {
     console.error('加载统计数据失败:', error)

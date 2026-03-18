@@ -371,6 +371,52 @@ class TripService {
     shared.viewCount++;
     return shared.trip;
   }
+
+  async getTripStats(userId, sessionId = null) {
+    try {
+      let whereClause = '';
+      const params = [];
+      
+      if (userId) {
+        whereClause = 'WHERE user_id = ?';
+        params.push(userId);
+      } else if (sessionId) {
+        whereClause = 'WHERE session_id = ?';
+        params.push(sessionId);
+      } else {
+        return { crowdTypes: {}, monthlyTrips: {} };
+      }
+
+      const trips = await dbAll(`SELECT requirements, created_at FROM trips ${whereClause}`, params);
+      
+      const crowdTypes = {};
+      const monthlyTrips = {};
+      
+      trips.forEach(trip => {
+        const requirements = JSON.parse(trip.requirements || '{}');
+        const crowd = requirements.crowd || '其他';
+        crowdTypes[crowd] = (crowdTypes[crowd] || 0) + 1;
+        
+        if (trip.created_at) {
+          const date = new Date(trip.created_at);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          monthlyTrips[monthKey] = (monthlyTrips[monthKey] || 0) + 1;
+        }
+      });
+
+      const sortedMonths = Object.keys(monthlyTrips).sort();
+      const last6Months = sortedMonths.slice(-6);
+      const filteredMonthlyTrips = {};
+      last6Months.forEach(month => {
+        filteredMonthlyTrips[month] = monthlyTrips[month];
+      });
+
+      return { crowdTypes, monthlyTrips: filteredMonthlyTrips };
+    } catch (error) {
+      logger.error(`获取行程统计失败: ${error.message}`);
+      return { crowdTypes: {}, monthlyTrips: {} };
+    }
+  }
 }
 
 module.exports = new TripService();

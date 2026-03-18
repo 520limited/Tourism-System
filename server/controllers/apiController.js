@@ -1278,4 +1278,29 @@ router.post('/popularity/overview', async (req, res) => {
   }
 });
 
+// 获取用户行程统计数据
+router.get('/user/stats', async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'];
+    
+    let userId = null;
+    if (sessionId) {
+      const user = await userService.getUserBySession(sessionId);
+      if (user) {
+        userId = user.userId;
+      }
+    }
+    
+    const stats = await tripService.getTripStats(userId, userId ? null : sessionId);
+    
+    res.json({
+      code: 200,
+      data: stats
+    });
+  } catch (error) {
+    logger.error(`获取统计数据失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '获取统计数据失败' });
+  }
+});
+
 module.exports = router;
