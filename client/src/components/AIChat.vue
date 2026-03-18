@@ -880,7 +880,7 @@ onMounted(() => {
 
 .send-btn {
   flex-shrink: 0;
-  background: #969a9e;
+  background: #7eafe0;
   border: none;
 }
 

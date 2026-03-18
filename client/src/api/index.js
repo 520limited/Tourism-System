@@ -132,6 +132,22 @@ export const favoriteAPI = {
   toggle: (type, item) => api.post(`/favorites/${type}/toggle`, { item })
 }
 
+export const preferenceAPI = {
+  recordBehavior: (data) => api.post('/behavior/record', data),
+  getProfile: () => api.get('/user/preferences/profile'),
+  getRecommendations: (type) => api.get(`/recommendations/${type}`),
+  submitFeedback: (tripId, data) => api.post(`/trips/${tripId}/feedback`, data)
+}
+
+export const popularityAPI = {
+  predict: (attraction, date, hour) => api.get('/popularity/predict', { params: { attraction, date, hour } }),
+  getBestTime: (attraction, date) => api.get('/popularity/best-time', { params: { attraction, date } }),
+  estimateDuration: (data) => api.post('/duration/estimate', data),
+  getTripPredictions: (data) => api.post('/popularity/trip-predictions', data),
+  optimizeSchedule: (data) => api.post('/schedule/optimize', data),
+  getOverview: (data) => api.post('/popularity/overview', data)
+}
+
 export const weatherAPI = {
   getCurrent: (city) => api.get('/weather', { params: { city } }),
   getForecast: (city, days) => api.get('/weather/forecast', { params: { city, days } })

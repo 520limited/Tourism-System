@@ -13,6 +13,8 @@ const exportService = require('../services/trip/exportService');
 const favoriteService = require('../services/user/favoriteService');
 const userService = require('../services/user/userService');
 const emailService = require('../services/user/emailService');
+const preferenceLearningService = require('../services/user/preferenceLearningService');
+const popularityPredictionService = require('../services/trip/popularityPredictionService');
 const logger = require('../services/logger');
 
 const sessions = new Map();
@@ -942,10 +944,337 @@ router.post('/favorites/:type/toggle', async (req, res) => {
     }
     
     const result = await favoriteService.toggleFavorite(user.userId, type, item);
+    
+    if (result.success) {
+      await preferenceLearningService.recordBehavior(user.userId, {
+        type: 'favorite',
+        itemType: type,
+        itemData: item
+      });
+    }
+    
     res.json({ code: 200, ...result });
   } catch (error) {
     logger.error(`切换收藏失败: ${error.message}`);
     res.status(500).json({ code: 500, message: '切换收藏失败' });
+  }
+});
+
+// ==================== 个性化偏好学习接口 ====================
+
+// 记录用户行为
+router.post('/behavior/record', async (req, res) => {
+  try {
+    const { type, itemType, itemData, context } = req.body;
+    const sessionId = req.headers['x-session-id'];
+    
+    if (!sessionId) {
+      return res.json({ code: 200, message: '游客模式，不记录行为' });
+    }
+    
+    const user = await userService.getUserBySession(sessionId);
+    if (!user) {
+      return res.json({ code: 200, message: '会话已过期' });
+    }
+    
+    const result = await preferenceLearningService.recordBehavior(user.userId, {
+      type,
+      itemType,
+      itemData,
+      context
+    });
+    
+    res.json({ code: 200, data: result });
+  } catch (error) {
+    logger.error(`记录行为失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '记录行为失败' });
+  }
+});
+
+// 获取用户偏好画像
+router.get('/user/preferences/profile', async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'];
+    
+    if (!sessionId) {
+      return res.json({ code: 200, data: null, message: '未登录' });
+    }
+    
+    const user = await userService.getUserBySession(sessionId);
+    if (!user) {
+      return res.json({ code: 200, data: null, message: '会话已过期' });
+    }
+    
+    const profile = await preferenceLearningService.getUserProfile(user.userId);
+    if (profile) {
+      const preferences = JSON.parse(profile.preferences || '{}');
+      const topPrefs = preferenceLearningService.getTopPreferences(preferences, 'all', 5);
+      
+      res.json({
+        code: 200,
+        data: {
+          preferences,
+          topPreferences: topPrefs,
+          confidence: preferenceLearningService.calculateConfidence(preferences),
+          totalBehaviors: preferences.totalBehaviors || 0
+        }
+      });
+    } else {
+      res.json({ code: 200, data: null, message: '暂无偏好数据' });
+    }
+  } catch (error) {
+    logger.error(`获取偏好画像失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '获取偏好画像失败' });
+  }
+});
+
+// 获取个性化推荐
+router.get('/recommendations/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    const sessionId = req.headers['x-session-id'];
+    
+    if (!sessionId) {
+      return res.json({ code: 200, data: { recommendations: [], reason: '游客模式' } });
+    }
+    
+    const user = await userService.getUserBySession(sessionId);
+    if (!user) {
+      return res.json({ code: 200, data: { recommendations: [], reason: '会话已过期' } });
+    }
+    
+    const result = await preferenceLearningService.getPersonalizedRecommendations(user.userId, type);
+    res.json({ code: 200, data: result });
+  } catch (error) {
+    logger.error(`获取个性化推荐失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '获取个性化推荐失败' });
+  }
+});
+
+// 记录行程反馈
+router.post('/trips/:id/feedback', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, comments, likedItems, dislikedItems } = req.body;
+    const sessionId = req.headers['x-session-id'];
+    
+    if (!sessionId) {
+      return res.status(401).json({ code: 401, message: '请先登录' });
+    }
+    
+    const user = await userService.getUserBySession(sessionId);
+    if (!user) {
+      return res.status(401).json({ code: 401, message: '会话已过期' });
+    }
+    
+    const result = await preferenceLearningService.recordTripFeedback(user.userId, id, {
+      rating,
+      comments,
+      likedItems,
+      dislikedItems
+    });
+    
+    res.json({ code: 200, data: result, message: '感谢您的反馈！' });
+  } catch (error) {
+    logger.error(`记录反馈失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '记录反馈失败' });
+  }
+});
+
+// ==================== 热度预测与时间预估接口 ====================
+
+// 获取景点热度预测
+router.get('/popularity/predict', async (req, res) => {
+  try {
+    const { attraction, date, hour } = req.query;
+    
+    if (!attraction) {
+      return res.status(400).json({ code: 400, message: '请提供景点名称' });
+    }
+    
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetHour = parseInt(hour) || 10;
+    
+    const prediction = popularityPredictionService.predictCrowdLevel(attraction, targetDate, targetHour);
+    
+    res.json({
+      code: 200,
+      data: {
+        attraction,
+        date: targetDate,
+        hour: targetHour,
+        ...prediction
+      }
+    });
+  } catch (error) {
+    logger.error(`热度预测失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '热度预测失败' });
+  }
+});
+
+// 获取景点最佳游览时间
+router.get('/popularity/best-time', async (req, res) => {
+  try {
+    const { attraction, date } = req.query;
+    
+    if (!attraction) {
+      return res.status(400).json({ code: 400, message: '请提供景点名称' });
+    }
+    
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const result = popularityPredictionService.getBestVisitTime(attraction, targetDate);
+    
+    res.json({
+      code: 200,
+      data: {
+        attraction,
+        date: targetDate,
+        ...result
+      }
+    });
+  } catch (error) {
+    logger.error(`获取最佳时间失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '获取最佳时间失败' });
+  }
+});
+
+// 获取游览时长预估
+router.post('/duration/estimate', async (req, res) => {
+  try {
+    const { attraction, crowdLevel, groupType, withKids, withElderly } = req.body;
+    
+    if (!attraction) {
+      return res.status(400).json({ code: 400, message: '请提供景点名称' });
+    }
+    
+    const result = popularityPredictionService.estimateVisitDuration(attraction, {
+      crowdLevel,
+      groupType,
+      withKids,
+      withElderly
+    });
+    
+    res.json({
+      code: 200,
+      data: {
+        attraction,
+        ...result
+      }
+    });
+  } catch (error) {
+    logger.error(`时长预估失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '时长预估失败' });
+  }
+});
+
+// 批量获取行程热度预测
+router.post('/popularity/trip-predictions', async (req, res) => {
+  try {
+    const { attractions, date, startTime } = req.body;
+    
+    if (!attractions || !Array.isArray(attractions)) {
+      return res.status(400).json({ code: 400, message: '请提供景点列表' });
+    }
+    
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const schedule = popularityPredictionService.predictDaySchedule(attractions, targetDate, startTime || 9);
+    
+    res.json({
+      code: 200,
+      data: {
+        date: targetDate,
+        schedule
+      }
+    });
+  } catch (error) {
+    logger.error(`行程热度预测失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '行程热度预测失败' });
+  }
+});
+
+// 优化行程安排（避开高峰）
+router.post('/schedule/optimize', async (req, res) => {
+  try {
+    const { attractions, date, preferences } = req.body;
+    
+    if (!attractions || !Array.isArray(attractions)) {
+      return res.status(400).json({ code: 400, message: '请提供景点列表' });
+    }
+    
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const optimized = popularityPredictionService.optimizeScheduleForCrowd(
+      attractions,
+      targetDate,
+      preferences || {}
+    );
+    
+    res.json({
+      code: 200,
+      data: {
+        date: targetDate,
+        optimizedSchedule: optimized
+      }
+    });
+  } catch (error) {
+    logger.error(`行程优化失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '行程优化失败' });
+  }
+});
+
+// 获取行程热度概览（用于前端展示）
+router.post('/popularity/overview', async (req, res) => {
+  try {
+    const { itinerary, date } = req.body;
+    
+    if (!itinerary || !Array.isArray(itinerary)) {
+      return res.status(400).json({ code: 400, message: '请提供行程数据' });
+    }
+    
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const overview = [];
+    
+    for (const day of itinerary) {
+      const dayOverview = {
+        day: day.day,
+        date: day.date,
+        attractions: []
+      };
+      
+      if (day.attractions && day.attractions.length > 0) {
+        for (let i = 0; i < day.attractions.length; i++) {
+          const attr = day.attractions[i];
+          const hour = 9 + i * 2;
+          const prediction = popularityPredictionService.predictCrowdLevel(attr.name, targetDate, hour);
+          const duration = popularityPredictionService.estimateVisitDuration(attr.name, {
+            crowdLevel: prediction.level
+          });
+          
+          dayOverview.attractions.push({
+            name: attr.name,
+            order: i + 1,
+            suggestedTime: `${hour}:00`,
+            crowdLevel: prediction.level,
+            crowdStatus: prediction.status,
+            crowdColor: prediction.color,
+            estimatedDuration: duration.estimatedDuration,
+            recommendation: prediction.recommendation
+          });
+        }
+      }
+      
+      overview.push(dayOverview);
+    }
+    
+    res.json({
+      code: 200,
+      data: {
+        date: targetDate,
+        overview
+      }
+    });
+  } catch (error) {
+    logger.error(`获取热度概览失败: ${error.message}`);
+    res.status(500).json({ code: 500, message: '获取热度概览失败' });
   }
 });
 

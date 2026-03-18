@@ -118,6 +118,25 @@
                       {{ attr.rating }}
                     </span>
                   </div>
+                  <div v-if="attr.crowdPrediction" class="crowd-info">
+                    <span class="crowd-label">热度:</span>
+                    <el-tag 
+                      size="small" 
+                      :style="{ backgroundColor: attr.crowdPrediction.color, color: '#fff', borderColor: attr.crowdPrediction.color }"
+                    >
+                      {{ attr.crowdPrediction.status }}
+                    </el-tag>
+                    <span class="crowd-level">{{ Math.round(attr.crowdPrediction.level * 100) }}%</span>
+                  </div>
+                  <div v-if="attr.smartDuration" class="smart-duration">
+                    <el-icon><Clock /></el-icon>
+                    <span>预估时长: {{ attr.smartDuration.estimated }}分钟</span>
+                    <span class="duration-range">({{ attr.smartDuration.min }}-{{ attr.smartDuration.max }}分钟)</span>
+                  </div>
+                  <div v-if="attr.suggestedTime && attr.crowdPrediction?.level > 0.7" class="suggestion-tip">
+                    <el-icon><Warning /></el-icon>
+                    建议游览时间: {{ attr.suggestedTime }}
+                  </div>
                   <div class="attr-address">{{ attr.address }}</div>
                   <div v-if="attr.description || attr.reason" class="attr-description">
                     <el-tooltip 
@@ -332,11 +351,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, reactive } from 'vue'
+import { ref, computed, watch, nextTick, reactive, onMounted } from 'vue'
 import { useTripStore } from '../stores/trip'
 import { useMapStore } from '../stores/map'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { planAPI } from '../api'
+import { planAPI, preferenceAPI, popularityAPI } from '../api'
 import { Sunny, Location, Clock, Star, Ticket, Food, MapLocation, Collection, Loading, House, Refresh, Warning, StarFilled } from '@element-plus/icons-vue'
 
 const tripStore = useTripStore()
@@ -348,6 +367,8 @@ const selectedRestaurant = ref(null)
 const selectedHotel = ref(null)
 const selectedCuisine = ref('all')
 const selectedHotelStar = ref('all')
+const crowdOverview = ref(null)
+const userPreference = ref(null)
 
 const favorites = reactive({
   attractions: new Set(),
@@ -451,6 +472,7 @@ const selectAttraction = (attraction) => {
     mapStore.setHighlightMarker(attraction.id)
     ElMessage.info(`景点: ${attraction.name}`)
   }
+  recordClickBehavior('attraction', attraction)
 }
 
 const selectRestaurant = (restaurant) => {
@@ -462,6 +484,7 @@ const selectRestaurant = (restaurant) => {
     mapStore.setHighlightMarker(restaurant.id)
     ElMessage.info(`餐厅: ${restaurant.name}`)
   }
+  recordClickBehavior('restaurant', restaurant)
 }
 
 const selectHotel = (hotel) => {
@@ -473,6 +496,7 @@ const selectHotel = (hotel) => {
     mapStore.setHighlightMarker(hotel.id)
     ElMessage.info(`酒店: ${hotel.name}`)
   }
+  recordClickBehavior('hotel', hotel)
 }
 
 const calculateDayCost = (dayTrip) => {
@@ -881,6 +905,61 @@ const loadFavorites = async () => {
   }
 }
 
+const loadUserPreference = async () => {
+  try {
+    const res = await preferenceAPI.getProfile()
+    if (res.code === 200 && res.data) {
+      userPreference.value = res.data
+    }
+  } catch (error) {
+    console.error('加载用户偏好失败:', error)
+  }
+}
+
+const recordViewBehavior = async (itemType, itemData) => {
+  try {
+    await preferenceAPI.recordBehavior({
+      type: 'view',
+      itemType,
+      itemData
+    })
+  } catch (error) {
+    console.error('记录行为失败:', error)
+  }
+}
+
+const recordClickBehavior = async (itemType, itemData) => {
+  try {
+    await preferenceAPI.recordBehavior({
+      type: 'click',
+      itemType,
+      itemData
+    })
+  } catch (error) {
+    console.error('记录行为失败:', error)
+  }
+}
+
+const loadCrowdOverview = async () => {
+  if (!tripStore.itinerary || tripStore.itinerary.length === 0) return
+  
+  try {
+    const res = await popularityAPI.getOverview({
+      itinerary: tripStore.itinerary
+    })
+    if (res.code === 200 && res.data) {
+      crowdOverview.value = res.data.overview
+    }
+  } catch (error) {
+    console.error('加载热度概览失败:', error)
+  }
+}
+
+onMounted(() => {
+  loadFavorites()
+  loadUserPreference()
+})
+
 loadFavorites()
 
 const printTrip = async () => {
@@ -1178,6 +1257,53 @@ const printTrip = async () => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.crowd-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.crowd-label {
+  color: #909399;
+}
+
+.crowd-level {
+  color: #606266;
+  font-weight: 500;
+}
+
+.smart-duration {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #409eff;
+}
+
+.duration-range {
+  color: #909399;
+  font-size: 11px;
+}
+
+.suggestion-tip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: linear-gradient(135deg, #fff7e6 0%, #ffecd2 100%);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #d48806;
+  border: 1px solid #ffd591;
 }
 
 .attr-address {

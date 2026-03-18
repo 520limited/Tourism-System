@@ -1,23 +1,16 @@
 const axios = require('axios');
 const logger = require('../logger');
+const preferenceLearningService = require('../user/preferenceLearningService');
+const popularityPredictionService = require('../trip/popularityPredictionService');
 
-/**
- * 千问AI服务
- * 使用阿里云百炼平台OpenAI兼容模式API
- */
 class QwenAIService {
   constructor() {
     this.apiKey = process.env.QWEN_API_KEY
-    // 使用阿里云百炼平台OpenAI兼容模式API
     this.baseUrl = process.env.QWEN_API_URL || 'https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1';
-    this.model = process.env.QWEN_MODEL || 'qwen-plus'; // 使用qwen-plus模型或从环境变量读取
+    this.model = process.env.QWEN_MODEL || 'qwen-plus';
   }
 
-  /**
-   * 处理用户自然语言输入，直接生成行程
-   */
-  async generateTripFromNaturalLanguage(userMessage, conversationHistory = [], weatherData = null) {
-    // 构建天气信息
+  async generateTripFromNaturalLanguage(userMessage, conversationHistory = [], weatherData = null, userId = null) {
     let weatherInfo = '';
     if (weatherData) {
       const now = weatherData.now;
@@ -28,14 +21,33 @@ class QwenAIService {
       });
     }
 
+    let preferencePrompt = '';
+    if (userId) {
+      try {
+        preferencePrompt = await preferenceLearningService.generatePreferencePrompt(userId);
+      } catch (e) {
+        logger.warn(`获取用户偏好失败: ${e.message}`);
+      }
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const dateInfo = popularityPredictionService.analyzeDate(today);
+    let datePrompt = '';
+    if (dateInfo.isHoliday) {
+      datePrompt = `\n【今日特殊】${dateInfo.holidayName}假期，景区人流较大，建议提前预约`;
+    } else if (dateInfo.isWeekend) {
+      datePrompt = '\n【今日提示】周末人流中等偏多，建议错峰游览';
+    }
+
     const systemPrompt = `你是长沙旅游规划专家。直接返回JSON行程，不要确认。
-${weatherInfo}
+${weatherInfo}${preferencePrompt}${datePrompt}
 雨天优先室内景点（博物馆、商场），晴天可户外。
+${preferencePrompt ? '根据用户偏好画像调整推荐内容，优先推荐用户偏好的景点类型、菜系和酒店档次。' : ''}
 
 返回格式：
 {"message":"行程简介","requirements":{"days":3,"crowd":"情侣","budget":"1000-2000","interests":["美食"],"hotelArea":"五一广场"},"activities":["特殊活动"],"itinerary":[{"day":1,"title":"第一天","attractions":[{"name":"景点名","type":"类型","rating":4.8,"description":"描述","address":"地址","latitude":28.17,"longitude":112.96,"ticketPrice":0,"estimatedDuration":2,"bestTime":"上午"}],"restaurants":[{"name":"餐厅名","cuisine":"湘菜","rating":4.7,"avgPrice":80,"address":"地址","latitude":28.19,"longitude":112.97,"specialty":"招牌菜"}],"hotels":[{"name":"酒店名","starRating":3,"rating":4.5,"pricePerNight":280,"address":"地址","latitude":28.19,"longitude":112.97}]}]}
 
-规则：每天至少3景点（优先根据用户需求理解），3餐厅3酒店随机；坐标准确价格真实；就近安排；提取用户特殊活动到activities字段`;
+规则：每天至少3景点（优先根据用户需求理解），3餐厅3酒店随机；坐标准确价格真实；就近安排；提取用户特殊活动到activities字段；根据热度预测合理安排游览时间，避开高峰时段`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -51,6 +63,9 @@ ${weatherInfo}
       logger.info(`=== AI生成行程请求 ===`);
       logger.info(`用户输入: ${userMessage}`);
       logger.info(`历史消息数: ${conversationHistory.length}`);
+      if (preferencePrompt) {
+        logger.info(`已加载用户偏好画像`);
+      }
 
       const aiResponse = await this.callAPI(messages);
 
@@ -59,6 +74,10 @@ ${weatherInfo}
 
       const result = this.parseTripResponse(aiResponse);
 
+      if (result.itinerary && result.itinerary.length > 0) {
+        result.itinerary = this.enhanceWithPopularityData(result.itinerary);
+      }
+
       logger.info(`AI生成完成: ${result.itinerary ? result.itinerary.length + '天行程' : '未完成'}`);
 
       return result;
@@ -66,6 +85,52 @@ ${weatherInfo}
       logger.error(`AI生成行程失败: ${error.message}`);
       throw error;
     }
+  }
+
+  enhanceWithPopularityData(itinerary) {
+    const today = new Date().toISOString().split('T')[0];
+    
+    for (const day of itinerary) {
+      if (day.attractions && day.attractions.length > 0) {
+        for (let i = 0; i < day.attractions.length; i++) {
+          const attr = day.attractions[i];
+          const suggestedHour = 9 + i * 3;
+          
+          const prediction = popularityPredictionService.predictCrowdLevel(attr.name, today, suggestedHour);
+          const duration = popularityPredictionService.estimateVisitDuration(attr.name, {
+            crowdLevel: prediction.level
+          });
+          
+          attr.crowdPrediction = {
+            level: prediction.level,
+            status: prediction.status,
+            color: prediction.color,
+            recommendation: prediction.recommendation
+          };
+          
+          attr.smartDuration = {
+            estimated: duration.estimatedDuration,
+            min: duration.minDuration,
+            max: duration.maxDuration,
+            factors: duration.factors
+          };
+          
+          if (!attr.estimatedDuration || attr.estimatedDuration < 30) {
+            attr.estimatedDuration = Math.round(duration.estimatedDuration / 60);
+          }
+          
+          if (prediction.level > 0.7 && !attr.bestTime) {
+            const bestTime = popularityPredictionService.getBestVisitTime(attr.name, today);
+            if (bestTime.bestHours && bestTime.bestHours.length > 0) {
+              attr.suggestedTime = `${bestTime.bestHours[0]}:00`;
+              attr.bestTimeReason = bestTime.reason;
+            }
+          }
+        }
+      }
+    }
+    
+    return itinerary;
   }
 
   /**
