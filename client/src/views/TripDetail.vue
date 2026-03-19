@@ -39,7 +39,7 @@
             <el-tab-pane
               v-for="(dayTrip, idx) in tripData.itinerary"
               :key="idx"
-              :label="'第 ' + dayTrip.day + ' 天'"
+              :label="getDayLabel(dayTrip, idx)"
               :name="String(dayTrip.day)"
             >
               <div class="day-content">
@@ -155,6 +155,18 @@ const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleDateString('zh-CN')
+}
+
+const getDayLabel = (dayTrip, idx) => {
+  if (dayTrip.date) {
+    const date = new Date(dayTrip.date)
+    if (!isNaN(date.getTime())) {
+      const month = date.getMonth() + 1
+      const day = date.getDate()
+      return `${month}月${day}日`
+    }
+  }
+  return `第 ${dayTrip.day} 天`
 }
 
 const loadTripData = async () => {

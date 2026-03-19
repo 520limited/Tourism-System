@@ -97,6 +97,9 @@ export const useTripStore = defineStore('trip', () => {
     if (tripData.routes) {
       routes.value = tripData.routes
     }
+    if (tripData.activities) {
+      activities.value = tripData.activities
+    }
   }
 
   const getSaveData = () => {

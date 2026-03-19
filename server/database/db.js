@@ -98,18 +98,6 @@ const createTables = async () => {
     }
 
     await conn.query(`
-      CREATE TABLE IF NOT EXISTS trip_conversations (
-        id VARCHAR(64) PRIMARY KEY,
-        trip_id VARCHAR(64) NOT NULL,
-        role VARCHAR(16) NOT NULL,
-        content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
-    logger.info('行程对话表已就绪');
-
-    await conn.query(`
       CREATE TABLE IF NOT EXISTS trip_routes (
         id VARCHAR(64) PRIMARY KEY,
         trip_id VARCHAR(64) NOT NULL,

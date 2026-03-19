@@ -56,23 +56,6 @@ async function migrate() {
     `);
     console.log('景点热度数据表创建成功');
 
-    console.log('开始创建行程热度预测缓存表...');
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS trip_crowd_predictions (
-        id VARCHAR(64) PRIMARY KEY,
-        trip_id VARCHAR(64) NOT NULL,
-        day_index INT NOT NULL,
-        attraction_name VARCHAR(128),
-        prediction_data TEXT COMMENT '预测数据JSON',
-        predicted_date DATE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_trip_id (trip_id),
-        INDEX idx_predicted_date (predicted_date),
-        UNIQUE KEY uk_trip_day_attraction (trip_id, day_index, attraction_name)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行程热度预测缓存表'
-    `);
-    console.log('行程热度预测缓存表创建成功');
-
     console.log('检查并添加trips表新字段...');
     const [tripsColumns] = await connection.query(`SHOW COLUMNS FROM trips`);
     const columnNames = tripsColumns.map(col => col.Field);

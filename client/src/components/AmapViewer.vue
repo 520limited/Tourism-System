@@ -186,6 +186,11 @@ const renderTripMarkers = () => {
   const itinerary = tripStore.itinerary
   if (!itinerary || !itinerary.length) return
 
+  console.log('渲染行程标记, 行程数据:', itinerary)
+  itinerary.forEach((day, idx) => {
+    console.log(`第${day.day}天 transports:`, day.transports)
+  })
+
   const dayColors = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#909399']
   const allPath = []
 
@@ -242,7 +247,9 @@ const renderTripMarkers = () => {
           polylines.push(polyline)
 
           if (dayTrip.transports && dayTrip.transports.length > 0) {
+            console.log(`第${dayTrip.day}天有交通数据: ${dayTrip.transports.length}条, path长度: ${path.length}`)
             dayTrip.transports.forEach((transport, tIdx) => {
+              console.log(`处理交通索引 ${tIdx}, path[tIdx]: ${path[tIdx]}, path[tIdx+1]: ${path[tIdx + 1]}`)
               if (path[tIdx] && path[tIdx + 1]) {
                 const segmentPath = [path[tIdx], path[tIdx + 1]]
                 const midLng = (path[tIdx][0] + path[tIdx + 1][0]) / 2
@@ -258,7 +265,13 @@ const renderTripMarkers = () => {
                 })
 
                 const info = transport.best || {}
-                const tooltipContent = `${transport.from} → ${transport.to}\n${info.icon || '🚶'} ${info.name || '步行'}${info.duration ? ` 约${info.duration}分钟` : ''}${info.distance ? ` ${info.distance}米` : ''}\n${info.reason || ''}`
+                const allOptions = transport.recommendations || []
+                
+                let optionsText = allOptions.map(opt => 
+                  `${opt.icon || '🚶'}${opt.name || '步行'} ${opt.duration ? opt.duration + '分钟' : ''} ${opt.cost !== undefined ? (opt.cost === 0 ? '免费' : opt.cost + '元') : ''}`
+                ).join(' | ')
+                
+                const tooltipContent = `${transport.from} → ${transport.to} (${info.distance || 0}米)\n${optionsText}`
 
                 segmentLine.on('mouseover', (e) => {
                   segmentLine.setOptions({
@@ -267,15 +280,12 @@ const renderTripMarkers = () => {
                   })
                   
                   const infoWindow = new AMap.InfoWindow({
-                    content: `<div class="transport-tooltip">
-                      <div class="tooltip-header">${transport.from} → ${transport.to}</div>
-                      <div class="tooltip-content">
-                        <span class="tooltip-icon">${info.icon || '🚶'}</span>
-                        <span class="tooltip-name">${info.name || '步行'}</span>
-                        ${info.duration ? `<span class="tooltip-duration">约${info.duration}分钟</span>` : ''}
-                        ${info.distance ? `<span class="tooltip-distance">${info.distance}米</span>` : ''}
-                      </div>
-                      <div class="tooltip-reason">${info.reason || ''}</div>
+                    content: `<div class="transport-bubble">
+                      <div class="bubble-route">${transport.from} → ${transport.to}</div>
+                      <div class="bubble-distance">${info.distance || 0}米</div>
+                      <div class="bubble-options">${allOptions.map(opt => 
+                        `<span class="bubble-opt">${opt.icon || '🚶'}${opt.duration || '--'}分钟</span>`
+                      ).join('')}</div>
                     </div>`,
                     offset: new AMap.Pixel(0, -10)
                   })
@@ -296,7 +306,8 @@ const renderTripMarkers = () => {
                 segmentLine.on('click', () => {
                   ElMessage.success({
                     message: tooltipContent,
-                    duration: 4000
+                    duration: 3000,
+                    customClass: 'transport-message'
                   })
                 })
 
@@ -311,10 +322,19 @@ const renderTripMarkers = () => {
                   </div>`
                 })
 
+                transportMarker.on('mouseover', () => {
+                  ElMessage.success({
+                    message: tooltipContent,
+                    duration: 3000,
+                    customClass: 'transport-message'
+                  })
+                })
+
                 transportMarker.on('click', () => {
                   ElMessage.success({
                     message: tooltipContent,
-                    duration: 4000
+                    duration: 3000,
+                    customClass: 'transport-message'
                   })
                 })
 
@@ -448,7 +468,13 @@ const renderTripMarkers = () => {
               })
 
               const info = transport.best || {}
-              const tooltipContent = `${transport.from} → ${transport.to}\n${info.icon || '🚶'} ${info.name || '步行'}${info.duration ? ` 约${info.duration}分钟` : ''}${info.distance ? ` ${info.distance}米` : ''}\n${info.reason || ''}`
+              const allOptions = transport.recommendations || []
+              
+              let optionsText = allOptions.map(opt => 
+                `${opt.icon || '🚶'}${opt.name || '步行'} ${opt.duration ? opt.duration + '分钟' : ''} ${opt.cost !== undefined ? (opt.cost === 0 ? '免费' : opt.cost + '元') : ''}`
+              ).join(' | ')
+              
+              const tooltipContent = `${transport.from} → ${transport.to} (${info.distance || 0}米)\n${optionsText}`
 
               segmentLine.on('mouseover', (e) => {
                 segmentLine.setOptions({
@@ -457,15 +483,12 @@ const renderTripMarkers = () => {
                 })
                 
                 const infoWindow = new AMap.InfoWindow({
-                  content: `<div class="transport-tooltip">
-                    <div class="tooltip-header">${transport.from} → ${transport.to}</div>
-                    <div class="tooltip-content">
-                      <span class="tooltip-icon">${info.icon || '🚶'}</span>
-                      <span class="tooltip-name">${info.name || '步行'}</span>
-                      ${info.duration ? `<span class="tooltip-duration">约${info.duration}分钟</span>` : ''}
-                      ${info.distance ? `<span class="tooltip-distance">${info.distance}米</span>` : ''}
-                    </div>
-                    <div class="tooltip-reason">${info.reason || ''}</div>
+                  content: `<div class="transport-bubble">
+                    <div class="bubble-route">${transport.from} → ${transport.to}</div>
+                    <div class="bubble-distance">${info.distance || 0}米</div>
+                    <div class="bubble-options">${allOptions.map(opt => 
+                      `<span class="bubble-opt">${opt.icon || '🚶'}${opt.duration || '--'}分钟</span>`
+                    ).join('')}</div>
                   </div>`,
                   offset: new AMap.Pixel(0, -10)
                 })
@@ -486,7 +509,8 @@ const renderTripMarkers = () => {
               segmentLine.on('click', () => {
                 ElMessage.success({
                   message: tooltipContent,
-                  duration: 4000
+                  duration: 3000,
+                  customClass: 'transport-message'
                 })
               })
 
@@ -501,10 +525,19 @@ const renderTripMarkers = () => {
                 </div>`
               })
 
+              transportMarker.on('mouseover', () => {
+                ElMessage.success({
+                  message: tooltipContent,
+                  duration: 3000,
+                  customClass: 'transport-message'
+                })
+              })
+
               transportMarker.on('click', () => {
                 ElMessage.success({
                   message: tooltipContent,
-                  duration: 4000
+                  duration: 3000,
+                  customClass: 'transport-message'
                 })
               })
 
@@ -800,21 +833,76 @@ onUnmounted(() => {
   font-size: 16px;
 }
 
-:deep(.transport-tooltip) {
-  padding: 8px 12px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  min-width: 180px;
+:deep(.transport-marker.always-show) {
+  width: auto;
+  height: auto;
+  padding: 6px 10px;
+  border-radius: 16px;
+  gap: 4px;
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+  color: white;
 }
 
-:deep(.transport-tooltip .tooltip-header) {
+:deep(.transport-marker.always-show .transport-icon) {
+  font-size: 14px;
+}
+
+:deep(.transport-marker.always-show .transport-name) {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:deep(.transport-marker.always-show .transport-duration) {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+:deep(.transport-bubble) {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  min-width: 120px;
+}
+
+:deep(.transport-bubble .bubble-route) {
   font-weight: 600;
   font-size: 13px;
   color: #303133;
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #ebeef5;
+  white-space: nowrap;
+}
+
+:deep(.transport-bubble .bubble-distance) {
+  font-size: 11px;
+  color: #909399;
+}
+
+:deep(.transport-bubble .bubble-options) {
+  display: flex;
+  gap: 6px;
+}
+
+:deep(.transport-bubble .bubble-opt) {
+  background: rgba(103, 179, 130, 0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+:deep(.transport-message) {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1)!important;
+  padding: 10px 15px!important;
+  font-size: 13px!important;
+  line-height: 1.5!important;
+  white-space: pre-line!important;
+}
+
+:deep(.transport-message .el-message__content) {
+  font-size: 13px!important;
+  line-height: 1.4!important;
 }
 
 :deep(.transport-tooltip .tooltip-content) {

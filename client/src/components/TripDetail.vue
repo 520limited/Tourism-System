@@ -68,7 +68,7 @@
         <el-tab-pane
           v-for="(dayTrip, idx) in tripStore.itinerary"
           :key="idx"
-          :label="'第 ' + dayTrip.day + ' 天'"
+          :label="getDayLabel(dayTrip, idx)"
           :name="String(dayTrip.day)"
         >
           <div class="day-info">
@@ -293,7 +293,7 @@
               <div class="section-header">
                 <div class="section-title">
                   <el-icon><Star /></el-icon>
-                  特殊活动
+                  推荐活动
                 </div>
               </div>
               <div class="activities-list">
@@ -309,7 +309,7 @@
                     {{ activity }}
                   </el-tag>
                 </template>
-                <span v-else class="no-activities">暂无特殊活动安排</span>
+                <span v-else class="no-activities">暂无推荐活动</span>
               </div>
             </div>
           </div>
@@ -373,7 +373,7 @@ import { Sunny, Location, Clock, Star, Ticket, Food, MapLocation, Collection, Lo
 const tripStore = useTripStore()
 const mapStore = useMapStore()
 
-const activeDay = ref('1')
+const activeDay = ref('')
 const selectedAttraction = ref(null)
 const selectedRestaurant = ref(null)
 const selectedHotel = ref(null)
@@ -381,6 +381,12 @@ const selectedCuisine = ref('all')
 const selectedHotelStar = ref('all')
 const crowdOverview = ref(null)
 const userPreference = ref(null)
+
+watch(() => tripStore.itinerary, (itinerary) => {
+  if (itinerary && itinerary.length > 0 && !activeDay.value) {
+    activeDay.value = String(itinerary[0].day)
+  }
+}, { immediate: true })
 
 const favorites = reactive({
   attractions: new Set(),
@@ -536,6 +542,18 @@ const truncateText = (text, maxLength) => {
   if (!text) return ''
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + '...'
+}
+
+const getDayLabel = (dayTrip, idx) => {
+  if (dayTrip.date) {
+    const date = new Date(dayTrip.date)
+    if (!isNaN(date.getTime())) {
+      const month = date.getMonth() + 1
+      const day = date.getDate()
+      return `${month}月${day}日`
+    }
+  }
+  return `第 ${dayTrip.day} 天`
 }
 
 // 获取费用明细

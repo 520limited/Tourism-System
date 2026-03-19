@@ -372,22 +372,27 @@ class AmapService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async searchNearbySubwayStation(lat, lng, radius = 1500) {
+  async searchNearbySubwayStation(lat, lng, radius = 1000) {
     try {
+      logger.info(`搜索地铁站: lat=${lat}, lng=${lng}, radius=${radius}`);
+      
       const response = await axios.get(`${this.baseUrl}/place/around`, {
         params: {
           key: this.key,
           location: `${lng},${lat}`,
-          keywords: '地铁站',
+          keywords: '地铁站|地铁',
           types: '150500',
           radius: radius,
           city: '长沙',
-          offset: 3,
+          citylimit: true,
+          offset: 5,
           extensions: 'base'
         },
         timeout: 20000
       });
 
+      logger.info(`地铁站搜索结果: status=${response.data.status}, count=${response.data.pois?.length || 0}`);
+      
       if (response.data.status === '1' && response.data.pois && response.data.pois.length > 0) {
         return response.data.pois.map(poi => {
           const location = poi.location ? poi.location.split(',') : ['0', '0'];
@@ -407,11 +412,85 @@ class AmapService {
     }
   }
 
+  async searchNearbyBusStation(lat, lng, radius = 800) {
+    try {
+      logger.info(`搜索公交站: lat=${lat}, lng=${lng}, radius=${radius}`);
+      
+      const response = await axios.get(`${this.baseUrl}/place/around`, {
+        params: {
+          key: this.key,
+          location: `${lng},${lat}`,
+          keywords: '公交站|公交',
+          types: '150700',
+          radius: radius,
+          city: '长沙',
+          citylimit: true,
+          offset: 5,
+          extensions: 'base'
+        },
+        timeout: 20000
+      });
+
+      logger.info(`公交站搜索结果: status=${response.data.status}, count=${response.data.pois?.length || 0}`);
+      
+      if (response.data.status === '1' && response.data.pois && response.data.pois.length > 0) {
+        return response.data.pois.map(poi => {
+          const location = poi.location ? poi.location.split(',') : ['0', '0'];
+          return {
+            name: poi.name,
+            distance: poi.distance,
+            latitude: parseFloat(location[1]) || 0,
+            longitude: parseFloat(location[0]) || 0,
+            address: poi.address || ''
+          };
+        });
+      }
+      return [];
+    } catch (error) {
+      logger.error(`搜索公交站失败: ${error.message}`);
+      return [];
+    }
+  }
+
   async checkSubwayAvailable(from, to) {
+    logger.info(`检查地铁可用性: from(${from.lat}, ${from.lng}) -> to(${to.lat}, ${to.lng})`);
+    
     const [fromStations, toStations] = await Promise.all([
       this.searchNearbySubwayStation(from.lat, from.lng),
       this.searchNearbySubwayStation(to.lat, to.lng)
     ]);
+
+    logger.info(`起点附近地铁站: ${fromStations.length}个, 终点附近地铁站: ${toStations.length}个`);
+    if (fromStations.length > 0) {
+      logger.info(`起点最近地铁站: ${fromStations[0].name}, 距离${fromStations[0].distance}米`);
+    }
+    if (toStations.length > 0) {
+      logger.info(`终点最近地铁站: ${toStations[0].name}, 距离${toStations[0].distance}米`);
+    }
+
+    return {
+      fromAvailable: fromStations.length > 0,
+      toAvailable: toStations.length > 0,
+      fromStation: fromStations[0] || null,
+      toStation: toStations[0] || null
+    };
+  }
+
+  async checkBusAvailable(from, to) {
+    logger.info(`检查公交可用性: from(${from.lat}, ${from.lng}) -> to(${to.lat}, ${to.lng})`);
+    
+    const [fromStations, toStations] = await Promise.all([
+      this.searchNearbyBusStation(from.lat, from.lng),
+      this.searchNearbyBusStation(to.lat, to.lng)
+    ]);
+
+    logger.info(`起点附近公交站: ${fromStations.length}个, 终点附近公交站: ${toStations.length}个`);
+    if (fromStations.length > 0) {
+      logger.info(`起点最近公交站: ${fromStations[0].name}, 距离${fromStations[0].distance}米`);
+    }
+    if (toStations.length > 0) {
+      logger.info(`终点最近公交站: ${toStations[0].name}, 距离${toStations[0].distance}米`);
+    }
 
     return {
       fromAvailable: fromStations.length > 0,

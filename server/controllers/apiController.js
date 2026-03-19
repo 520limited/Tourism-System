@@ -279,12 +279,16 @@ router.post('/plan', async (req, res) => {
 
     // 将交通数据合并到行程中
     if (enhancedPlanning.transports) {
+      logger.info(`交通数据准备合并: ${enhancedPlanning.transports.length}天有交通数据`);
       enhancedPlanning.transports.forEach(dayTransport => {
         const day = verifiedItinerary.find(d => d.day === dayTransport.day);
         if (day) {
           day.transports = dayTransport.routes;
+          logger.info(`第${day.day}天交通数据已合并: ${day.transports.length}条`);
         }
       });
+    } else {
+      logger.warn('enhancedPlanning.transports 为空');
     }
 
     // 提取热度预测数据
@@ -387,7 +391,7 @@ router.post('/plan', async (req, res) => {
 // 聊天接口 - 用于调整行程
 router.post('/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, tripId: existingTripId } = req.body;
     const sessionId = req.headers['x-session-id'] || uuidv4();
 
     if (!message || !message.trim()) {
@@ -407,6 +411,27 @@ router.post('/chat', async (req, res) => {
       itinerary: [],
       status: 'chatting'
     };
+
+    // 如果有 existingTripId，从数据库加载之前的对话历史
+    if (existingTripId) {
+      logger.info(`chat继续对话 - 加载已有行程: ${existingTripId}`);
+      const existingTrip = await tripService.getTripById(existingTripId);
+      if (existingTrip) {
+        // 加载之前的对话历史
+        if (existingTrip.conversationHistory && existingTrip.conversationHistory.length > 0) {
+          session.history = existingTrip.conversationHistory;
+          logger.info(`chat加载对话历史: ${session.history.length} 条`);
+        }
+        // 加载之前的行程
+        if (existingTrip.itinerary && existingTrip.itinerary.length > 0) {
+          session.itinerary = existingTrip.itinerary;
+        }
+        // 加载之前的需求
+        if (existingTrip.requirements) {
+          session.requirements = existingTrip.requirements;
+        }
+      }
+    }
 
     session.history.push({ role: 'user', content: message });
 
@@ -439,6 +464,30 @@ router.post('/chat', async (req, res) => {
         });
       }
 
+      // 计算费用
+      const costData = costCalculatorService.calculateTotalCost(verifiedItinerary, aiResult.requirements);
+      const costReport = costCalculatorService.generateCostReport(costData);
+      verifiedItinerary.forEach((day, index) => {
+        if (costData?.dailyCosts[index]) { day.dailyCost = costData.dailyCosts[index]; }
+      });
+
+      // 智能规划增强 - 添加交通推荐
+      const enhancedPlanning = await smartPlanningService.enhanceItinerary(verifiedItinerary, {
+        budget: aiResult.requirements.budget,
+        timeSensitive: true,
+        comfort: aiResult.requirements.crowd === '情侣' || aiResult.requirements.crowd === '家庭'
+      });
+
+      // 将交通数据合并到行程中
+      if (enhancedPlanning.transports) {
+        enhancedPlanning.transports.forEach(dayTransport => {
+          const day = verifiedItinerary.find(d => d.day === dayTransport.day);
+          if (day) {
+            day.transports = dayTransport.routes;
+          }
+        });
+      }
+
       // 保存行程到数据库
       const tripResult = await tripService.createTrip(
         userId,
@@ -451,6 +500,9 @@ router.post('/chat', async (req, res) => {
       );
       const tripId = tripResult.tripId;
 
+      // 保存交通路线到数据库
+      await tripService.saveTripRoutes(tripId, verifiedItinerary);
+
       sessions.set(sessionId, session);
 
       res.json({
@@ -462,6 +514,7 @@ router.post('/chat', async (req, res) => {
           requirements: aiResult.requirements,
           activities: aiResult.activities || [],
           itinerary: verifiedItinerary,
+          costData: costReport,
           ready: true
         }
       });

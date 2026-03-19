@@ -54,12 +54,12 @@
           </div>
           
           <div class="form-section">
-            <div class="form-title">预算范围</div>
-            <el-radio-group v-model="quickForm.budget" size="small">
-              <el-radio-button label="0-500">经济型</el-radio-button>
-              <el-radio-button label="500-1000">实惠型</el-radio-button>
-              <el-radio-button label="1000-2000">舒适型</el-radio-button>
-              <el-radio-button label="2000+">豪华型</el-radio-button>
+            <div class="form-title">预算范围（按天计算）</div>
+            <el-radio-group v-model="quickForm.budgetType" size="small">
+              <el-radio-button label="economy">经济型 ({{ quickForm.days || 'X' }}天×200-300元)</el-radio-button>
+              <el-radio-button label="budget">实惠型 ({{ quickForm.days || 'X' }}天×300-500元)</el-radio-button>
+              <el-radio-button label="comfort">舒适型 ({{ quickForm.days || 'X' }}天×500-800元)</el-radio-button>
+              <el-radio-button label="luxury">豪华型 ({{ quickForm.days || 'X' }}天×800+元)</el-radio-button>
             </el-radio-group>
           </div>
           
@@ -198,12 +198,30 @@ const updateProcessingStep = (step) => {
 const quickForm = ref({
   days: null,
   crowd: '',
-  budget: '',
+  budgetType: '',
   interests: []
 })
 
+const budgetRanges = {
+  economy: { min: 200, max: 300, label: '经济型' },
+  budget: { min: 300, max: 500, label: '实惠型' },
+  comfort: { min: 500, max: 800, label: '舒适型' },
+  luxury: { min: 800, max: null, label: '豪华型' }
+}
+
+const calculateBudget = () => {
+  if (!quickForm.value.days || !quickForm.value.budgetType) return ''
+  const range = budgetRanges[quickForm.value.budgetType]
+  const days = quickForm.value.days
+  if (range.max) {
+    return `${days * range.min}-${days * range.max}`
+  } else {
+    return `${days * range.min}+`
+  }
+}
+
 const isQuickFormValid = computed(() => {
-  return quickForm.value.days && quickForm.value.crowd && quickForm.value.budget
+  return quickForm.value.days && quickForm.value.crowd && quickForm.value.budgetType
 })
 
 const scrollToBottom = () => {
@@ -233,7 +251,7 @@ const formatMessage = (content) => {
 const submitQuickForm = async () => {
   if (!isQuickFormValid.value || isTyping.value) return
   
-  const formMessage = `我想去长沙玩${quickForm.value.days}天，${quickForm.value.crowd}出行，预算${quickForm.value.budget}元` + 
+  const formMessage = `我想去长沙玩${quickForm.value.days}天，${quickForm.value.crowd}出行，预算${calculateBudget()}元` + 
     (quickForm.value.interests.length > 0 ? `，喜欢${quickForm.value.interests.join('、')}` : '')
   
   const now = Date.now()
@@ -262,16 +280,7 @@ const submitQuickForm = async () => {
   setTimeout(() => updateProcessingStep(4), 8000)
   
   try {
-    const res = await chatAPI.sendMessage({
-      message: formMessage,
-      conversationId: sessionId.value,
-      formData: {
-        days: quickForm.value.days,
-        crowd: quickForm.value.crowd,
-        budget: quickForm.value.budget,
-        interests: quickForm.value.interests
-      }
-    }, sessionId.value)
+    const res = await chatAPI.sendMessageWithTrip(formMessage, sessionId.value, tripStore.tripId)
     
     isTyping.value = false
     
@@ -369,10 +378,7 @@ const sendMessageWithValue = async (text) => {
     if (isNaturalLanguagePlan) {
       res = await planAPI.generateItinerary(text, sessionId.value, tripStore.tripId)
     } else {
-      res = await chatAPI.sendMessage({
-        message: text,
-        conversationId: sessionId.value
-      }, sessionId.value)
+      res = await chatAPI.sendMessageWithTrip(text, sessionId.value, tripStore.tripId)
     }
     
     isTyping.value = false
@@ -458,7 +464,7 @@ const resetChat = () => {
   quickForm.value = {
     days: null,
     crowd: '',
-    budget: '',
+    budgetType: '',
     interests: []
   }
 }

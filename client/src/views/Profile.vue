@@ -169,7 +169,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useTripStore } from '../stores/trip'
@@ -376,13 +376,21 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
-onMounted(() => {
+const initData = () => {
   if (userStore.isLoggedIn) {
     loadUserInfo()
     loadStats()
   } else {
     router.push('/login')
   }
+}
+
+onMounted(() => {
+  initData()
+})
+
+onActivated(() => {
+  initData()
 })
 </script>
 

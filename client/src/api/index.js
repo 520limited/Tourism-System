@@ -41,6 +41,13 @@ export const chatAPI = {
     }
     return api.post('/chat', data, config)
   },
+  sendMessageWithTrip: (message, sessionId, tripId) => {
+    const config = {}
+    if (sessionId) {
+      config.headers = { 'X-Session-Id': sessionId }
+    }
+    return api.post('/chat', { message, tripId }, config)
+  },
   getHistory: (conversationId) => api.get(`/chat/history/${conversationId}`)
 }
 

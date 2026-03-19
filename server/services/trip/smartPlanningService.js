@@ -109,19 +109,21 @@ class SmartPlanningService {
 
     let recommendations = [];
 
-    if (distance <= this.transportThresholds.walk && weather !== 'rainy' && !hasLuggage) {
+    // 步行 - 总是推荐（距离合理时）
+    if (distance <= 2000) {
       recommendations.push({
         mode: 'walking',
         name: '步行',
         duration: Math.round(distance / 80),
         cost: 0,
         distance: Math.round(distance),
-        reason: '距离较近，步行可欣赏沿途风景',
+        reason: distance <= 500 ? '距离很近，步行即可' : '距离适中，步行可欣赏沿途风景',
         icon: '🚶'
       });
     }
 
-    if (distance <= this.transportThresholds.bike && weather !== 'rainy' && !hasLuggage) {
+    // 骑行 - 天气好时推荐
+    if (distance <= 3000 && weather !== 'rainy' && !hasLuggage) {
       recommendations.push({
         mode: 'cycling',
         name: '骑行',
@@ -133,6 +135,7 @@ class SmartPlanningService {
       });
     }
 
+    // 地铁 - 检查起点终点是否有地铁站
     let subwayInfo = null;
     if (from?.latitude && from?.longitude && to?.latitude && to?.longitude) {
       subwayInfo = await amapService.checkSubwayAvailable(
@@ -161,43 +164,9 @@ class SmartPlanningService {
         walkToStation: walkToStation,
         walkFromStation: walkFromStation
       });
-    } else if (subwayInfo) {
-      if (!subwayInfo.fromAvailable && !subwayInfo.toAvailable) {
-        recommendations.push({
-          mode: 'subway',
-          name: '地铁',
-          duration: null,
-          cost: null,
-          distance: Math.round(distance),
-          reason: '起点和终点附近暂无地铁站',
-          icon: '🚇',
-          unavailable: true
-        });
-      } else if (!subwayInfo.fromAvailable) {
-        recommendations.push({
-          mode: 'subway',
-          name: '地铁',
-          duration: null,
-          cost: null,
-          distance: Math.round(distance),
-          reason: '起点附近暂无地铁站',
-          icon: '🚇',
-          unavailable: true
-        });
-      } else {
-        recommendations.push({
-          mode: 'subway',
-          name: '地铁',
-          duration: null,
-          cost: null,
-          distance: Math.round(distance),
-          reason: '终点附近暂无地铁站',
-          icon: '🚇',
-          unavailable: true
-        });
-      }
     }
 
+    // 网约车 - 总是推荐
     recommendations.push({
       mode: 'taxi',
       name: isRushHour ? '网约车（可能拥堵）' : '网约车',
@@ -208,8 +177,29 @@ class SmartPlanningService {
       icon: '🚗'
     });
 
+    // 公交 - 检查附近是否有公交站
+    if (distance > 1500 && from?.latitude && to?.latitude) {
+      const busInfo = await amapService.checkBusAvailable(
+        { lat: from.latitude, lng: from.longitude },
+        { lat: to.latitude, lng: to.longitude }
+      );
+      
+      if (busInfo && busInfo.fromAvailable && busInfo.toAvailable) {
+        recommendations.push({
+          mode: 'bus',
+          name: '公交',
+          duration: Math.round(distance / 250) + 10,
+          cost: 2,
+          distance: Math.round(distance),
+          reason: `${busInfo.fromStation?.name || '附近站'} → ${busInfo.toStation?.name || '目的地站'}，经济实惠`,
+          icon: '🚌',
+          fromStation: busInfo.fromStation?.name,
+          toStation: busInfo.toStation?.name
+        });
+      }
+    }
+
     return recommendations
-      .filter(r => !r.unavailable)
       .sort((a, b) => {
         const scoreA = this.calculateTransportScore(a, preferences);
         const scoreB = this.calculateTransportScore(b, preferences);
