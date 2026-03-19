@@ -214,6 +214,23 @@ router.post('/plan', async (req, res) => {
       status: 'planning'
     };
 
+    // 如果有 existingTripId，从数据库加载之前的对话历史
+    if (existingTripId) {
+      logger.info(`继续对话 - 加载已有行程: ${existingTripId}`);
+      const existingTrip = await tripService.getTripById(existingTripId);
+      if (existingTrip) {
+        // 加载之前的对话历史
+        if (existingTrip.conversationHistory && existingTrip.conversationHistory.length > 0) {
+          session.history = existingTrip.conversationHistory;
+          logger.info(`加载对话历史: ${session.history.length} 条`);
+        }
+        // 加载之前的行程
+        if (existingTrip.itinerary && existingTrip.itinerary.length > 0) {
+          session.itinerary = existingTrip.itinerary;
+        }
+      }
+    }
+
     session.history.push({ role: 'user', content: message });
 
     // AI生成行程
@@ -270,6 +287,38 @@ router.post('/plan', async (req, res) => {
       });
     }
 
+    // 提取热度预测数据
+    const crowdPredictions = [];
+    verifiedItinerary.forEach(day => {
+      if (day.attractions) {
+        day.attractions.forEach(attr => {
+          if (attr.crowdPrediction) {
+            crowdPredictions.push({
+              day: day.day,
+              attractionName: attr.name,
+              prediction: attr.crowdPrediction
+            });
+          }
+        });
+      }
+    });
+
+    // 提取时间预估数据
+    const timeEstimates = [];
+    verifiedItinerary.forEach(day => {
+      if (day.attractions) {
+        day.attractions.forEach(attr => {
+          if (attr.smartDuration) {
+            timeEstimates.push({
+              day: day.day,
+              attractionName: attr.name,
+              estimate: attr.smartDuration
+            });
+          }
+        });
+      }
+    });
+
     // 保存会话
     session.requirements = aiResult.requirements;
     session.itinerary = verifiedItinerary;
@@ -290,12 +339,28 @@ router.post('/plan', async (req, res) => {
     if (existingTripId) {
       await tripService.updateTrip(existingTripId, {
         requirements: aiResult.requirements,
-        itinerary: aiResult.itinerary,
-        activities: aiResult.activities || []
+        itinerary: verifiedItinerary,
+        activities: aiResult.activities || [],
+        crowdPredictions,
+        timeEstimates
       });
+      // 保存交通路线到数据库
+      await tripService.saveTripRoutes(existingTripId, verifiedItinerary);
     } else {
-      const tripResult = await tripService.createTrip(userId, aiResult.requirements, aiResult.itinerary, [], [], aiResult.activities || []);
+      const tripResult = await tripService.createTrip(
+        userId, 
+        aiResult.requirements, 
+        verifiedItinerary, 
+        [], 
+        [], 
+        aiResult.activities || [],
+        null,
+        crowdPredictions,
+        timeEstimates
+      );
       tripId = tripResult.tripId;
+      // 保存交通路线到数据库
+      await tripService.saveTripRoutes(tripId, verifiedItinerary);
     }
     sessions.set(sessionId, session);
 

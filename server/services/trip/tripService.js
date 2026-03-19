@@ -11,7 +11,7 @@ class TripService {
     this.sharedTrips = new Map();
   }
 
-  async createTrip(userId, params, itinerary, conversationHistory = [], routes = [], activities = [], sessionId = null) {
+  async createTrip(userId, params, itinerary, conversationHistory = [], routes = [], activities = [], sessionId = null, crowdPredictions = null, timeEstimates = null) {
     const safeParams = params || { days: 3, crowd: '' };
     const tripId = uuidv4();
     const conversationId = uuidv4();
@@ -21,8 +21,8 @@ class TripService {
       logger.info(`创建行程参数 - userId: ${userId}, sessionId: ${sessionId}, title: ${title}`);
       
       await dbRun(
-        `INSERT INTO trips (id, user_id, session_id, title, requirements, itinerary, conversation_history, routes, activities, status) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO trips (id, user_id, session_id, title, requirements, itinerary, conversation_history, routes, activities, crowd_predictions, time_estimates, status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           tripId,
           userId || null,
@@ -33,6 +33,8 @@ class TripService {
           JSON.stringify(conversationHistory || []),
           JSON.stringify(routes || []),
           JSON.stringify(activities || []),
+          crowdPredictions ? JSON.stringify(crowdPredictions) : null,
+          timeEstimates ? JSON.stringify(timeEstimates) : null,
           'draft'
         ]
       );
@@ -43,6 +45,60 @@ class TripService {
     } catch (error) {
       logger.error(`创建行程失败: ${error.message}`);
       throw error;
+    }
+  }
+
+  async saveTripRoutes(tripId, itinerary) {
+    try {
+      for (const day of itinerary) {
+        if (day.transports && day.transports.length > 0) {
+          for (const transport of day.transports) {
+            const routeId = uuidv4();
+            await dbRun(
+              `INSERT INTO trip_routes (id, trip_id, day, route_type, origin_name, destination_name, origin_coord, destination_coord, route_data) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                routeId,
+                tripId,
+                day.day,
+                transport.best?.mode || 'unknown',
+                transport.from || '',
+                transport.to || '',
+                transport.originCoord || '',
+                transport.destinationCoord || '',
+                JSON.stringify(transport)
+              ]
+            );
+          }
+        }
+      }
+      logger.info(`保存交通路线成功: ${tripId}`);
+    } catch (error) {
+      logger.error(`保存交通路线失败: ${error.message}`);
+    }
+  }
+
+  async getTripRoutes(tripId) {
+    try {
+      const routes = await dbAll(
+        'SELECT * FROM trip_routes WHERE trip_id = ? ORDER BY day, created_at',
+        [tripId]
+      );
+      return routes.map(route => ({
+        id: route.id,
+        tripId: route.trip_id,
+        day: route.day,
+        routeType: route.route_type,
+        originName: route.origin_name,
+        destinationName: route.destination_name,
+        originCoord: route.origin_coord,
+        destinationCoord: route.destination_coord,
+        routeData: JSON.parse(route.route_data || '{}'),
+        createdAt: route.created_at
+      }));
+    } catch (error) {
+      logger.error(`获取交通路线失败: ${error.message}`);
+      return [];
     }
   }
 

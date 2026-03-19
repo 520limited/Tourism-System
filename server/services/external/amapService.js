@@ -26,8 +26,8 @@ class AmapService {
       const params = {
         key: this.key,
         keywords: keywords,
-        city: '长沙',
-        citylimit: false,
+        city: '430100',
+        citylimit: true,
         offset: offset,
         page: page,
         extensions: 'all'
