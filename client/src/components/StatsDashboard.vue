@@ -64,15 +64,15 @@
         <span>智能洞察</span>
       </div>
       <div class="insight-content">
-        <p v-if="insights.length > 0">{{ insights[0] }}</p>
-        <p v-else>开始规划您的第一次旅行吧！</p>
+        <p v-for="(insight, index) in insights" :key="index">{{ insight }}</p>
+        <p v-if="insights.length === 0">开始规划您的第一次旅行吧！</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { Document, Star, Location, Food, TrendCharts } from '@element-plus/icons-vue'
 
@@ -92,6 +92,8 @@ const props = defineProps({
 
 const pieChartRef = ref(null)
 const barChartRef = ref(null)
+let pieChart = null
+let barChart = null
 const animatedStats = ref({
   totalTrips: 0,
   favoriteCount: 0,
@@ -101,12 +103,131 @@ const animatedStats = ref({
 
 const insights = computed(() => {
   const result = []
-  if (props.stats.totalTrips > 5) {
-    result.push('您是旅行达人！已累计规划 ' + props.stats.totalTrips + ' 次行程')
+  const { totalTrips, favoriteCount, totalAttractions, totalRestaurants, crowdTypes, monthlyTrips } = props.stats
+  
+  const greetings = ['您好，旅行家！', '欢迎回来，探索者！', '嗨，旅行达人！', '你好，冒险家！']
+  const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)]
+  
+  if (totalTrips === 0) {
+    const tips = [
+      '世界那么大，开始您的第一次旅行吧！',
+      '每一段旅程都是新的故事，开始书写您的旅行篇章！',
+      '地图上的每个标记都等待着您的足迹，出发吧！',
+      '准备好行囊，精彩的目的地正在等您！'
+    ]
+    result.push(randomGreeting + tips[Math.floor(Math.random() * tips.length)])
+    return result
   }
-  if (props.stats.favoriteCount > 3) {
-    result.push('您收藏了 ' + props.stats.favoriteCount + ' 个心仪地点，快去打卡吧！')
+  
+  if (totalTrips >= 1 && totalTrips <= 2) {
+    const tips = [
+      '您的旅行种子已发芽，继续浇灌让它茁壮成长！',
+      '旅行第一步已经迈出，前方有更多精彩等着您！',
+      '新手旅行家已上线，继续探索解锁更多成就！'
+    ]
+    result.push(tips[Math.floor(Math.random() * tips.length)])
+  } else if (totalTrips > 2 && totalTrips <= 5) {
+    result.push('您是旅行爱好者！已累计规划 ' + totalTrips + ' 次行程，继续保持探索的热情！')
+  } else if (totalTrips > 5 && totalTrips <= 10) {
+    result.push('旅行达人认证！您已规划 ' + totalTrips + ' 次行程，足迹遍布长沙各处！')
+  } else if (totalTrips > 10 && totalTrips <= 20) {
+    result.push('您是资深旅行家！' + totalTrips + ' 次行程见证了您对旅行的热爱！')
+  } else if (totalTrips > 20) {
+    result.push('旅行王者诞生！' + totalTrips + ' 次行程，您已成为长沙旅行专家！')
   }
+  
+  if (favoriteCount > 0) {
+    if (favoriteCount >= 10) {
+      result.push('收藏达人！您收藏了 ' + favoriteCount + ' 个心仪地点，是时候逐一打卡了！')
+    } else if (favoriteCount >= 5) {
+      result.push('您收藏了 ' + favoriteCount + ' 个心仪地点，每一个都值得期待！')
+    } else {
+      result.push('您已收藏 ' + favoriteCount + ' 个地点，继续发现更多宝藏吧！')
+    }
+  } else if (totalTrips > 0) {
+    result.push('小贴士：收藏喜欢的景点、美食、住宿，方便下次快速找到！')
+  }
+  
+  if (totalAttractions > 0 && totalRestaurants > 0) {
+    if (totalAttractions > totalRestaurants * 2) {
+      result.push('您是景点控！已打卡 ' + totalAttractions + ' 个景点，别忘了品尝当地美食哦~')
+    } else if (totalRestaurants > totalAttractions * 2) {
+      result.push('您是美食家！已体验 ' + totalRestaurants + ' 家美食，记得也要欣赏风景！')
+    } else {
+      result.push('完美平衡！您的旅行兼顾景点与美食，是理想的旅行方式！')
+    }
+  } else if (totalAttractions > 0 && totalRestaurants === 0) {
+    result.push('您已打卡 ' + totalAttractions + ' 个景点，下次试试探索美食？')
+  } else if (totalRestaurants > 0 && totalAttractions === 0) {
+    result.push('您已体验 ' + totalRestaurants + ' 家美食，下次也去看看景点吧！')
+  }
+  
+  if (crowdTypes && Object.keys(crowdTypes).length > 0) {
+    const sortedCrowds = Object.entries(crowdTypes).sort((a, b) => b[1] - a[1])
+    const mainCrowd = sortedCrowds[0]
+    const crowdInsights = {
+      '独自旅行': {
+        title: '独行侠',
+        desc: '享受独处的旅行时光，自由自在探索世界'
+      },
+      '情侣出游': {
+        title: '浪漫旅人',
+        desc: '与TA一起创造甜蜜回忆'
+      },
+      '家庭亲子': {
+        title: '家庭守护者',
+        desc: '陪伴家人，共享温馨时光'
+      },
+      '朋友结伴': {
+        title: '欢乐使者',
+        desc: '与好友同行，快乐加倍'
+      }
+    }
+    
+    if (mainCrowd) {
+      const insight = crowdInsights[mainCrowd[0]] || { title: mainCrowd[0], desc: '' }
+      result.push('您是"' + insight.title + '"！' + insight.desc + '，已规划 ' + mainCrowd[1] + ' 次！')
+    }
+    
+    if (sortedCrowds.length >= 3) {
+      result.push('您的旅行方式丰富多彩，尝试过 ' + sortedCrowds.length + ' 种不同的出行方式！')
+    }
+  }
+  
+  if (monthlyTrips && Object.keys(monthlyTrips).length > 0) {
+    const months = Object.keys(monthlyTrips).sort()
+    const lastMonth = months[months.length - 1]
+    const lastMonthTrips = monthlyTrips[lastMonth]
+    
+    if (lastMonthTrips > 0) {
+      if (lastMonthTrips >= 5) {
+        result.push('本月您已规划 ' + lastMonthTrips + ' 次行程，出行热情爆棚！')
+      } else if (lastMonthTrips >= 3) {
+        result.push('本月您已规划 ' + lastMonthTrips + ' 次行程，保持这个节奏！')
+      } else {
+        result.push('本月您已规划 ' + lastMonthTrips + ' 次行程，继续加油！')
+      }
+    }
+    
+    if (months.length >= 3) {
+      const totalMonths = months.length
+      const tripsPerMonth = Object.values(monthlyTrips).reduce((a, b) => a + b, 0) / totalMonths
+      result.push('过去 ' + totalMonths + ' 个月，平均每月规划 ' + tripsPerMonth.toFixed(1) + ' 次行程！')
+    }
+  }
+  
+  const achievementTips = [
+    '小贴士：完善偏好设置可以获得更精准的行程推荐！',
+    '挑战：尝试不同的人群类型出行，解锁更多旅行体验！',
+    '成就追踪：继续规划行程，解锁"旅行专家"称号！',
+    '记得在旅途中拍照留念，记录美好瞬间！',
+    '长沙还有更多隐藏景点等待您去发现！'
+  ]
+  
+  if (result.length < 4 && totalTrips > 0) {
+    result.push(achievementTips[Math.floor(Math.random() * achievementTips.length)])
+  }
+  
   return result
 })
 
@@ -132,7 +253,11 @@ const animateNumber = (target, value, duration = 1000) => {
 const initPieChart = () => {
   if (!pieChartRef.value) return
   
-  const chart = echarts.init(pieChartRef.value)
+  if (!pieChart) {
+    pieChart = echarts.init(pieChartRef.value)
+    window.addEventListener('resize', () => pieChart && pieChart.resize())
+  }
+  
   const crowdTypes = props.stats.crowdTypes || {}
   const data = Object.entries(crowdTypes).map(([name, value]) => ({ name, value }))
   
@@ -176,14 +301,17 @@ const initPieChart = () => {
     }]
   }
   
-  chart.setOption(option)
-  window.addEventListener('resize', () => chart.resize())
+  pieChart.setOption(option)
 }
 
 const initBarChart = () => {
   if (!barChartRef.value) return
   
-  const chart = echarts.init(barChartRef.value)
+  if (!barChart) {
+    barChart = echarts.init(barChartRef.value)
+    window.addEventListener('resize', () => barChart && barChart.resize())
+  }
+  
   const monthlyTrips = props.stats.monthlyTrips || {}
   const months = Object.keys(monthlyTrips).slice(-6)
   const values = months.map(m => monthlyTrips[m])
@@ -222,8 +350,7 @@ const initBarChart = () => {
     }]
   }
   
-  chart.setOption(option)
-  window.addEventListener('resize', () => chart.resize())
+  barChart.setOption(option)
 }
 
 onMounted(() => {
@@ -236,6 +363,17 @@ onMounted(() => {
     initBarChart()
   }, 300)
 })
+
+watch(() => props.stats, (newStats) => {
+  nextTick(() => {
+    animateNumber('totalTrips', newStats.totalTrips || 0)
+    animateNumber('favoriteCount', newStats.favoriteCount || 0)
+    animateNumber('totalAttractions', newStats.totalAttractions || 0)
+    animateNumber('totalRestaurants', newStats.totalRestaurants || 0)
+    initPieChart()
+    initBarChart()
+  })
+}, { deep: true })
 </script>
 
 <style scoped>
@@ -331,9 +469,9 @@ onMounted(() => {
 }
 
 .insight-card {
-  background: #9dddd8;
+  background: linear-gradient(135deg, #9dddd8 0%, #7ec8c3 100%);
   border-radius: 12px;
-  padding: 16px;
+  padding: 20px;
   color: #fff;
 }
 
@@ -341,15 +479,22 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .insight-content p {
-  margin: 0;
-  font-size: 13px;
-  opacity: 0.9;
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  opacity: 0.95;
+  line-height: 1.6;
+  padding-left: 4px;
+  border-left: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.insight-content p:last-child {
+  margin-bottom: 0;
 }
 
 @media (max-width: 768px) {

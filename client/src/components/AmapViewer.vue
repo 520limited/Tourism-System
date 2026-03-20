@@ -304,11 +304,9 @@ const renderTripMarkers = () => {
                 })
 
                 segmentLine.on('click', () => {
-                  ElMessage.success({
-                    message: tooltipContent,
-                    duration: 3000,
-                    customClass: 'transport-message'
-                  })
+                  if (segmentLine._infoWindow) {
+                    segmentLine._infoWindow.open(map, segmentLine._lastLnglat || segmentLine.getPath()[0])
+                  }
                 })
 
                 segmentLine.setMap(map)
@@ -323,19 +321,21 @@ const renderTripMarkers = () => {
                 })
 
                 transportMarker.on('mouseover', () => {
-                  ElMessage.success({
-                    message: tooltipContent,
-                    duration: 3000,
-                    customClass: 'transport-message'
-                  })
+                  if (segmentLine._infoWindow) {
+                    segmentLine._infoWindow.open(map, [midLng, midLat])
+                  }
                 })
-
+                
+                transportMarker.on('mouseout', () => {
+                  if (segmentLine._infoWindow) {
+                    segmentLine._infoWindow.close()
+                  }
+                })
+                
                 transportMarker.on('click', () => {
-                  ElMessage.success({
-                    message: tooltipContent,
-                    duration: 3000,
-                    customClass: 'transport-message'
-                  })
+                  if (segmentLine._infoWindow) {
+                    segmentLine._infoWindow.open(map, [midLng, midLat])
+                  }
                 })
 
                 transportMarker.setMap(map)
