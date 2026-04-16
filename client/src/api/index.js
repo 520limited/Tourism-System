@@ -41,11 +41,11 @@ export const chatAPI = {
 
 export const planAPI = {
   generateItinerary: (message, tripId) => api.post('/plan', { message, tripId }),
-  refreshAttractions: (currentAttractions, sessionId, hotelArea) => {
-    return api.post('/refresh/attractions', { currentAttractions, sessionId, hotelArea })
+  refreshAttractions: (currentAttractions, sessionId, hotelArea, currentDay, locationContext) => {
+    return api.post('/refresh/attractions', { currentAttractions, sessionId, hotelArea, currentDay, locationContext })
   },
-  refreshRestaurants: (currentRestaurants, sessionId) => {
-    return api.post('/refresh/restaurants', { currentRestaurants, sessionId })
+  refreshRestaurants: (currentRestaurants, sessionId, currentDay, locationContext, cuisine) => {
+    return api.post('/refresh/restaurants', { currentRestaurants, sessionId, currentDay, locationContext, cuisine })
   },
   refreshSnacks: (currentSnacks, sessionId) => {
     return api.post('/refresh/snacks', { currentSnacks, sessionId })
@@ -56,8 +56,8 @@ export const planAPI = {
   refreshCheckIn: (currentCheckInPoints, sessionId) => {
     return api.post('/refresh/checkin', { currentCheckInPoints, sessionId })
   },
-  refreshHotels: (currentHotels, sessionId, hotelArea, currentDay) => {
-    return api.post('/refresh/hotels', { currentHotels, sessionId, hotelArea, currentDay })
+  refreshHotels: (currentHotels, sessionId, hotelArea, currentDay, locationContext, starRating) => {
+    return api.post('/refresh/hotels', { currentHotels, sessionId, hotelArea, currentDay, locationContext, starRating })
   },
   generateTransportation: () => api.post('/transportation', {})
 }

@@ -110,12 +110,12 @@ class LocationVerifyService {
         return {
           ...location,
           id: matchedPoi.id || location.id,
-          name: matchedPoi.name || location.name,
+          name: location.name,
           address: matchedPoi.address || location.address,
           latitude: matchedPoi.latitude,
           longitude: matchedPoi.longitude,
           rating: matchedPoi.rating || location.rating,
-          description: matchedPoi.description || location.description || location.reason || '',
+          description: location.description || location.reason || matchedPoi.description || '',
           source: 'amap_verified'
         };
       } else {

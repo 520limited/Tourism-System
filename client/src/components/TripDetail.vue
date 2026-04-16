@@ -180,10 +180,9 @@
                 <div class="section-actions">
                   <el-select v-model="selectedCuisine" size="small" @change="handleCuisineChange" placeholder="分类">
                     <el-option label="全部" value="all"></el-option>
-                    <el-option label="湘菜" value="湘菜"></el-option>
+                    <el-option label="菜馆" value="湘菜"></el-option>
                     <el-option label="小吃" value="小吃"></el-option>
                     <el-option label="西餐" value="西餐"></el-option>
-                    <el-option label="其他" value="其他"></el-option>
                   </el-select>
                   <el-button size="small" @click="handleRefreshRestaurants(dayTrip.day)">
                     <el-icon><Refresh /></el-icon>
@@ -195,7 +194,7 @@
                 <div v-for="(rest, rIdx) in filteredRestaurants(dayTrip.restaurants)" :key="rIdx" class="restaurant-item" @click="selectRestaurant(rest)" :class="{ active: selectedRestaurant?.id === rest.id }">
                   <div class="rest-info">
                     <span class="rest-name">{{ rest.name }}</span>
-                    <span class="rest-type">{{ rest.cuisine || '湘菜' }}</span>
+                    <span class="rest-type">{{ rest.cuisine || '菜馆' }}</span>
                   </div>
                   <div class="rest-meta">
                     <span v-if="rest.rating" class="rest-rating">
@@ -633,20 +632,35 @@ const handleRefreshRestaurants = async (day) => {
     const sessionId = localStorage.getItem('sessionId')
     const dayTrip = tripStore.itinerary.find(d => d.day === day)
     
-    // 收集所有天已存在的餐厅名称
+    // 收集所有天已存在的餐厅名称 + 当天精确地理上下文
     const allExistingNames = []
+    let locationContext = ''
+
     tripStore.itinerary.forEach(d => {
       if (d.restaurants && d.restaurants.length > 0) {
         allExistingNames.push(...d.restaurants.map(r => r.name))
+
+        if (d.day === day && d.restaurants.length > 0) {
+          const locations = d.restaurants.map(r =>
+            `${r.name}(地址: ${r.address || '未知'}, 坐标: ${r.latitude || '?'}, ${r.longitude || '?'})`
+          )
+          locationContext = locations.join('；')
+        }
       }
     })
-    
+
     if (allExistingNames.length === 0) {
       ElMessage.warning('当前行程中没有餐厅可换')
       return
     }
-    
-    const res = await planAPI.refreshRestaurants(allExistingNames, sessionId)
+
+    const res = await planAPI.refreshRestaurants(
+      allExistingNames,
+      sessionId,
+      day,
+      locationContext,
+      selectedCuisine.value
+    )
     
     if (res.code === 200 && res.data && res.data.restaurants) {
       tripStore.replaceRestaurants(day, res.data.restaurants)
@@ -669,24 +683,34 @@ const handleRefreshHotels = async (day) => {
     const sessionId = localStorage.getItem('sessionId')
     const dayTrip = tripStore.itinerary.find(d => d.day === day)
     
-    // 收集所有天已存在的酒店名称
+    // 收集所有天已存在的酒店名称 + 当天精确地理上下文
     const allExistingNames = []
+    let locationContext = ''
     tripStore.itinerary.forEach(d => {
       if (d.hotels && d.hotels.length > 0) {
         allExistingNames.push(...d.hotels.map(h => h.name))
+
+        if (d.day === day && d.hotels.length > 0) {
+          const locations = d.hotels.map(h =>
+            `${h.name}(地址: ${h.address || '未知'}, 坐标: ${h.latitude || '?'}, ${h.longitude || '?'})`
+          )
+          locationContext = locations.join('；')
+        }
       }
     })
-    
+
     if (allExistingNames.length === 0) {
       ElMessage.warning('当前行程中没有酒店可换')
       return
     }
-    
+
     const res = await planAPI.refreshHotels(
       allExistingNames,
       sessionId,
       tripStore.tripParams.hotelArea,
-      day
+      day,
+      locationContext,
+      selectedHotelStar.value
     )
     
     if (res.code === 200 && res.data && res.data.hotels) {

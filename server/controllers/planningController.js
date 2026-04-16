@@ -240,8 +240,9 @@ router.post('/chat', async (req, res) => {
 
 router.post('/refresh/attractions', async (req, res) => {
   try {
-    const currentNames = Array.isArray(req.body.currentAttractions) ? req.body.currentAttractions : [];
-    const newAttractions = await refreshService.refreshAttractions(currentNames, 3);
+    const { currentAttractions, locationContext } = req.body;
+    const currentNames = Array.isArray(currentAttractions) ? currentAttractions : [];
+    const newAttractions = await refreshService.refreshAttractions(currentNames, 3, null, locationContext);
     res.json({ code: 200, data: { attractions: newAttractions, message: `为您推荐了${newAttractions.length}个新景点` } });
   } catch (error) {
     logger.error(`刷新景点失败: ${error.message}`);
@@ -251,8 +252,11 @@ router.post('/refresh/attractions', async (req, res) => {
 
 router.post('/refresh/restaurants', async (req, res) => {
   try {
-    const currentNames = Array.isArray(req.body.currentRestaurants) ? req.body.currentRestaurants : [];
-    const newRestaurants = await refreshService.refreshRestaurants(currentNames, 3);
+    const { currentRestaurants, locationContext, cuisine } = req.body;
+    const currentNames = Array.isArray(currentRestaurants) ? currentRestaurants : [];
+    // 有特定菜系→返回3个；全部(all)→返回10个(多类别覆盖)
+    const count = cuisine && cuisine !== 'all' ? 3 : 10;
+    const newRestaurants = await refreshService.refreshRestaurants(currentNames, count, null, locationContext, cuisine);
     res.json({ code: 200, data: { restaurants: newRestaurants, message: `为您推荐了${newRestaurants.length}家新餐厅` } });
   } catch (error) {
     logger.error(`刷新餐厅失败: ${error.message}`);
@@ -262,9 +266,12 @@ router.post('/refresh/restaurants', async (req, res) => {
 
 router.post('/refresh/hotels', async (req, res) => {
   try {
-    const currentNames = Array.isArray(req.body.currentHotels) ? req.body.currentHotels : [];
-    const area = req.body.hotelArea || '五一广场';
-    const newHotels = await refreshService.refreshHotels(currentNames, area, 3);
+    const { currentHotels, hotelArea, locationContext, starRating } = req.body;
+    const currentNames = Array.isArray(currentHotels) ? currentHotels : [];
+    // 有特定星级→返回3个；全部(all)→返回10个
+    const count = starRating && starRating !== 'all' ? 3 : 10;
+    const area = hotelArea || '五一广场';
+    const newHotels = await refreshService.refreshHotels(currentNames, area, count, locationContext, starRating);
     res.json({ code: 200, data: { hotels: newHotels, message: `为您推荐了${newHotels.length}家新酒店` } });
   } catch (error) {
     logger.error(`刷新酒店失败: ${error.message}`);

@@ -467,37 +467,59 @@ const loadSavedTrip = async () => {
   // 优先从 URL 参数加载行程
   const urlParams = new URLSearchParams(window.location.search)
   const urlTripId = urlParams.get('tripId')
-  
+
   let tripIdToLoad = urlTripId || localStorage.getItem('currentTripId')
-  
-  if (!tripIdToLoad) return
-  
-  try {
-    const res = await fetch(`/api/trips/${tripIdToLoad}`).then(r => r.json())
-    
-    if (res.code === 200 && res.data) {
-      tripStore.loadTripData(res.data)
-      tripStore.setTripId(tripIdToLoad)
-      localStorage.setItem('currentTripId', tripIdToLoad)
-      
-      if (res.data.conversationHistory && res.data.conversationHistory.length > 0) {
-        messages.value = res.data.conversationHistory.map(msg => ({
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp,
-          ready: msg.ready,
-          formOptions: msg.formOptions
-        }))
+  let loadedFromDB = false
+
+  if (tripIdToLoad) {
+    try {
+      const res = await fetch(`/api/trips/${tripIdToLoad}`).then(r => r.json())
+
+      if (res.code === 200 && res.data) {
+        tripStore.loadTripData(res.data)
+        tripStore.setTripId(tripIdToLoad)
+        localStorage.setItem('currentTripId', tripIdToLoad)
+
+        if (res.data.conversationHistory && res.data.conversationHistory.length > 0) {
+          messages.value = res.data.conversationHistory.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            ready: msg.ready,
+            formOptions: msg.formOptions
+          }))
+          loadedFromDB = true
+        }
+
+        scrollToBottom()
+      } else if (res.code === 404) {
+        localStorage.removeItem('currentTripId')
+        tripStore.setTripId(null)
       }
-      
-      scrollToBottom()
-    } else if (res.code === 404) {
+    } catch (error) {
+      console.error('加载已保存行程失败:', error)
       localStorage.removeItem('currentTripId')
-      tripStore.setTripId(null)
     }
-  } catch (error) {
-    console.error('加载已保存行程失败:', error)
-    localStorage.removeItem('currentTripId')
+  }
+
+  // Fallback: 如果 DB 未恢复成功，但 tripStore 中已有对话历史（比如从其他页面导航回来时）
+  // 则直接从全局 store 恢复对话消息
+  if (!loadedFromDB && messages.value.length === 0 && tripStore.conversationHistory.length > 0) {
+    messages.value = tripStore.conversationHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.timestamp,
+      ready: msg.ready,
+      formOptions: msg.formOptions
+    }))
+    sessionId.value = localStorage.getItem('sessionId')
+
+    // 同步 sessionId
+    if (!sessionId.value && tripStore.tripId) {
+      // 尝试保持当前 tripId 关联
+    }
+
+    scrollToBottom()
   }
 }
 
