@@ -139,9 +139,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { tripAPI } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Location, Clock, Star, Ticket, Food, House } from '@element-plus/icons-vue'
+import { useTripStore } from '../stores/trip'
 
 const route = useRoute()
 const router = useRouter()
+const tripStore = useTripStore()
 
 const loading = ref(false)
 const tripData = ref(null)
@@ -194,6 +196,30 @@ const loadTripData = async () => {
 
 const editTrip = () => {
   if (tripData.value) {
+    // 预先将行程数据写入 tripStore 和 localStorage
+    // 预注入到 store（带保护标记，防止后续加载时被覆盖）
+    const hasHistory = Array.isArray(tripData.value.conversationHistory) 
+      ? tripData.value.conversationHistory.length > 0 
+      : !!tripData.value.conversationHistory
+    console.log('[编辑跳转] hasHistory:', hasHistory, '对话条数:', 
+      Array.isArray(tripData.value.conversationHistory) ? tripData.value.conversationHistory.length : 'N/A')
+    
+    tripStore.loadTripData({
+      tripId: tripData.value.tripId,
+      requirements: tripData.value.requirements,
+      itinerary: tripData.value.itinerary,
+      conversationHistory: tripData.value.conversationHistory || [],
+      routes: tripData.value.routes || []
+    })
+    
+    // 如果有对话历史，标记为需要保护（包括非空数组）
+    if (hasHistory) {
+      tripStore.setConversationHistory(tripData.value.conversationHistory)
+      console.log('[编辑跳转] 已保护对话历史, 条数:', tripStore.conversationHistory.length)
+    }
+    
+    localStorage.setItem('currentTripId', String(tripData.value.tripId))
+
     router.push(`/?tripId=${tripData.value.tripId}`)
   }
 }
@@ -208,6 +234,10 @@ const confirmDelete = async () => {
     
     const res = await tripAPI.delete(tripData.value.tripId)
     if (res.code === 200) {
+      // 清理前端状态
+      tripStore.resetTrip()
+      localStorage.removeItem('currentTripId')
+      
       ElMessage.success('删除成功')
       router.push('/history')
     } else {

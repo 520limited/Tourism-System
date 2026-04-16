@@ -83,7 +83,9 @@ export const useTripStore = defineStore('trip', () => {
     enhancedPlanning.value = null
   }
 
-  const loadTripData = (tripData) => {
+  const loadTripData = (tripData, options = {}) => {
+    const { preserveHistory = false } = options
+    
     if (tripData.tripId) {
       tripId.value = tripData.tripId
     }
@@ -93,7 +95,8 @@ export const useTripStore = defineStore('trip', () => {
     if (tripData.itinerary) {
       itinerary.value = tripData.itinerary
     }
-    if (tripData.conversationHistory) {
+    // 对话历史：除非明确要求保留，否则用新数据覆盖
+    if (!preserveHistory && tripData.conversationHistory) {
       conversationHistory.value = tripData.conversationHistory
     }
     if (tripData.routes) {

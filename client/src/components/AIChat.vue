@@ -471,17 +471,27 @@ const loadSavedTrip = async () => {
   let tripIdToLoad = urlTripId || localStorage.getItem('currentTripId')
   let loadedFromDB = false
 
+  // 保护已有的对话历史（从历史页预注入或之前会话保留的）
+  const hadExistingHistory = tripStore.conversationHistory && tripStore.conversationHistory.length > 0
+  const preservedConversationHistory = hadExistingHistory ? [...tripStore.conversationHistory] : null
+
   if (tripIdToLoad) {
     try {
       const res = await fetch(`/api/trips/${tripIdToLoad}`).then(r => r.json())
 
       if (res.code === 200 && res.data) {
-        tripStore.loadTripData(res.data)
+        // 如果API没有对话历史但store中已有，用store的数据回填（防止覆盖丢失）
+        if ((!res.data.conversationHistory || res.data.conversationHistory.length === 0) && preservedConversationHistory) {
+          res.data.conversationHistory = preservedConversationHistory
+        }
+
+        // 如果是从历史页预注入的对话，加载时保护不被覆盖
+        tripStore.loadTripData(res.data, { preserveHistory: hadExistingHistory })
         tripStore.setTripId(tripIdToLoad)
         localStorage.setItem('currentTripId', tripIdToLoad)
 
-        if (res.data.conversationHistory && res.data.conversationHistory.length > 0) {
-          messages.value = res.data.conversationHistory.map(msg => ({
+        if (tripStore.conversationHistory && tripStore.conversationHistory.length > 0) {
+          messages.value = tripStore.conversationHistory.map(msg => ({
             role: msg.role,
             content: msg.content,
             timestamp: msg.timestamp,

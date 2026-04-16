@@ -37,7 +37,12 @@ onMounted(async () => {
   }
   
   router.beforeEach(async (to, from, next) => {
-    if (tripStore.itinerary && tripStore.itinerary.length > 0) {
+    // 只有在有有效tripId且itinerary非空时才自动保存
+    // 防止：删除行程后导航时把已删除的数据重新写入DB
+    const hasValidTrip = tripStore.tripId && tripStore.itinerary && tripStore.itinerary.length > 0
+    const hasValidSession = localStorage.getItem('currentTripId')
+    
+    if (hasValidTrip && hasValidSession) {
       await tripStore.autoSave()
     }
     next()

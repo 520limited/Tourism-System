@@ -63,20 +63,25 @@ async function processAndSaveItinerary(aiResult, session, sessionId, existingTri
     });
   }
 
-  // 保存到数据库
+  // 保存到数据库（包含完整的对话历史和路由）
   let tripId = existingTripId;
   if (existingTripId) {
     await tripService.updateTrip(existingTripId, {
       requirements: aiResult.requirements,
       itinerary: verifiedItinerary,
       activities: aiResult.activities || [],
+      conversationHistory: session.history,       // ← 保存对话历史！
+      routes: enhancedPlanning?.transports || [],   // ← 保存路线规划
       crowdPredictions: [],
       timeEstimates: []
     });
     await tripService.saveTripRoutes(existingTripId, verifiedItinerary);
   } else {
     const tripResult = await tripService.createTrip(
-      userId, aiResult.requirements, verifiedItinerary, [], [], aiResult.activities || [], null, [], []
+      userId, aiResult.requirements, verifiedItinerary,
+      session.history,                              // ← 对话历史（不再为空！）
+      enhancedPlanning?.transports || [],           // ← 路线数据
+      aiResult.activities || [], null, [], []
     );
     tripId = tripResult.tripId;
     await tripService.saveTripRoutes(tripId, verifiedItinerary);
@@ -128,6 +133,9 @@ router.post('/plan', async (req, res) => {
     if (user) userId = user.userId;
 
     // 处理并保存行程
+    // 先把AI回复加入session.history（确保完整对话被保存到DB）
+    session.history.push({ role: 'assistant', content: aiResult.message });
+    
     const { verifiedItinerary, costReport, enhancedPlanning, tripId } = await processAndSaveItinerary(
       aiResult, session, sessionId, existingTripId, userId
     );
@@ -137,7 +145,6 @@ router.post('/plan', async (req, res) => {
     session.itinerary = verifiedItinerary;
     session.enhancedPlanning = enhancedPlanning;
     session.status = 'completed';
-    session.history.push({ role: 'assistant', content: aiResult.message });
     sessions.set(sessionId, session);
 
     res.json({

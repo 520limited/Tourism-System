@@ -97,6 +97,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Search, MapLocation, View, Delete, Edit } from '@element-plus/icons-vue'
 import { tripAPI } from '../api'
+import { useTripStore } from '../stores/trip'
 
 const router = useRouter()
 
@@ -170,6 +171,22 @@ const deleteTrip = async (tripId) => {
     const res = await tripAPI.delete(tripId)
     if (res.code === 200) {
       ElMessage.success('删除成功')
+      
+      const tripStore = useTripStore()
+      const strTripId = String(tripId)
+      const storedId = String(localStorage.getItem('currentTripId') || '')
+      const storeId = String(tripStore.tripId || '')
+      
+      // 无论是否是当前行程，只要匹配就清理（更安全）
+      if (storeId === strTripId || storedId === strTripId) {
+        tripStore.resetTrip()
+        localStorage.removeItem('currentTripId')
+        // 清除URL中的tripId参数，防止回主页时再次加载
+        if (window.history.replaceState) {
+          window.history.replaceState({}, '', window.location.pathname)
+        }
+      }
+      
       loadTrips()
     } else {
       ElMessage.error(res.message || '删除失败')
