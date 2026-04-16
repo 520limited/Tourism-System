@@ -86,9 +86,9 @@
                   <el-icon><Location /></el-icon>
                   景点安排
                 </div>
-                <el-button size="small" @click="handleRefreshAttractions(dayTrip.day)">
-                  <el-icon><Refresh /></el-icon>
-                  换一批
+                <el-button size="small" :loading="isRefreshing.attractions" :disabled="isRefreshing.attractions" @click="handleRefreshAttractions(dayTrip.day)">
+                  <el-icon v-if="!isRefreshing.attractions"><Refresh /></el-icon>
+                  {{ isRefreshing.attractions ? '更换中...' : '换一批' }}
                 </el-button>
               </div>
               <div
@@ -171,7 +171,9 @@
               </div>
             </div>
 
-            <div v-if="dayTrip.restaurants && dayTrip.restaurants.length > 0" class="day-restaurants">
+            </div>
+
+            <div class="day-restaurants">
               <div class="section-header">
                 <div class="section-title">
                   <el-icon><Food /></el-icon>
@@ -184,13 +186,15 @@
                     <el-option label="小吃" value="小吃"></el-option>
                     <el-option label="西餐" value="西餐"></el-option>
                   </el-select>
-                  <el-button size="small" @click="handleRefreshRestaurants(dayTrip.day)">
-                    <el-icon><Refresh /></el-icon>
-                    换一批
+                  <el-button size="small" :loading="isRefreshing.restaurants" :disabled="isRefreshing.restaurants" @click="handleRefreshRestaurants(dayTrip.day)">
+                    <el-icon v-if="!isRefreshing.restaurants"><Refresh /></el-icon>
+                    {{ isRefreshing.restaurants ? '更换中...' : '换一批' }}
                   </el-button>
                 </div>
               </div>
-              <div class="restaurant-list">
+              <div class="restaurant-scroll-wrapper">
+                <template v-if="filteredRestaurants(dayTrip.restaurants).length > 0">
+                <div class="restaurant-list" :class="{ 'is-overflow': filteredRestaurants(dayTrip.restaurants).length > 3 }">
                 <div v-for="(rest, rIdx) in filteredRestaurants(dayTrip.restaurants)" :key="rIdx" class="restaurant-item" @click="selectRestaurant(rest)" :class="{ active: selectedRestaurant?.id === rest.id }">
                   <div class="rest-info">
                     <span class="rest-name">{{ rest.name }}</span>
@@ -221,10 +225,15 @@
                     @click.stop="toggleFavorite('restaurant', rest)"
                   />
                 </div>
+                </div>
+                <div v-if="filteredRestaurants(dayTrip.restaurants).length > 3" class="list-more-hint">
+                  共{{ filteredRestaurants(dayTrip.restaurants).length }}家，上下滚动查看更多
+                </div>
+                </template>
+                <div v-else class="empty-hint">
+                  <span>暂无餐厅数据，可点击「换一批」获取推荐</span>
+                </div>
               </div>
-            </div>
-
-            <div v-if="dayTrip.hotels && dayTrip.hotels.length > 0" class="day-hotels">
               <div class="section-header">
                 <div class="section-title">
                   <el-icon><House /></el-icon>
@@ -238,13 +247,14 @@
                     <el-option label="3星级" value="3"></el-option>
                     <el-option label="经济型" value="2"></el-option>
                   </el-select>
-                  <el-button size="small" @click="handleRefreshHotels(dayTrip.day)">
-                    <el-icon><Refresh /></el-icon>
-                    换一批
+                  <el-button size="small" :loading="isRefreshing.hotels" :disabled="isRefreshing.hotels" @click="handleRefreshHotels(dayTrip.day)">
+                    <el-icon v-if="!isRefreshing.hotels"><Refresh /></el-icon>
+                    {{ isRefreshing.hotels ? '更换中...' : '换一批' }}
                   </el-button>
                 </div>
               </div>
               <div class="hotel-list">
+                <template v-if="filteredHotels(dayTrip.hotels).length > 0">
                 <div v-for="(hotel, hIdx) in filteredHotels(dayTrip.hotels)" :key="hIdx" class="hotel-item" @click="selectHotel(hotel)" :class="{ active: selectedHotel?.id === hotel.id }">
                   <div class="hotel-info">
                     <span class="hotel-name">{{ hotel.name }}</span>
@@ -280,7 +290,10 @@
                     @click.stop="toggleFavorite('hotel', hotel)"
                   />
                 </div>
-              </div>
+                </template>
+                <div v-else class="empty-hint">
+                  <span>暂无酒店数据，可点击「换一批」获取推荐</span>
+                </div>
             </div>
 
             <div v-if="dayTrip.weatherAdvice" class="weather-advice">
@@ -378,6 +391,7 @@ const selectedRestaurant = ref(null)
 const selectedHotel = ref(null)
 const selectedCuisine = ref('all')
 const selectedHotelStar = ref('all')
+const isRefreshing = ref({ attractions: false, restaurants: false, hotels: false })
 const crowdOverview = ref(null)
 const userPreference = ref(null)
 
@@ -581,11 +595,17 @@ const filteredHotels = (hotels) => {
   if (selectedHotelStar.value === 'all') {
     return hotels
   }
-  return hotels.filter(hotel => hotel.starRating === parseInt(selectedHotelStar.value))
+  const targetStar = String(selectedHotelStar.value)
+  return hotels.filter(hotel => {
+    const hotelStar = hotel.starRating !== undefined ? String(hotel.starRating) : ''
+    return hotelStar === targetStar || (!hotelStar && targetStar === '2')
+  })
 }
 
 // 换一批景点 - 排除所有天已存在的景点
 const handleRefreshAttractions = async (day) => {
+  if (isRefreshing.value.attractions) return
+  isRefreshing.value.attractions = true
   ElMessage.info('正在为您更换景点...')
   
   try {
@@ -621,11 +641,15 @@ const handleRefreshAttractions = async (day) => {
   } catch (error) {
     console.error('更换景点失败:', error)
     ElMessage.error('更换景点失败，请重试')
+  } finally {
+    isRefreshing.value.attractions = false
   }
 }
 
 // 换一批美食 - 排除所有天已存在的餐厅
 const handleRefreshRestaurants = async (day) => {
+  if (isRefreshing.value.restaurants) return
+  isRefreshing.value.restaurants = true
   ElMessage.info('正在为您更换美食...')
   
   try {
@@ -672,11 +696,15 @@ const handleRefreshRestaurants = async (day) => {
   } catch (error) {
     console.error('更换美食失败:', error)
     ElMessage.error('更换美食失败，请重试')
+  } finally {
+    isRefreshing.value.restaurants = false
   }
 }
 
 // 换一批住宿 - 排除所有天已存在的酒店
 const handleRefreshHotels = async (day) => {
+  if (isRefreshing.value.hotels) return
+  isRefreshing.value.hotels = true
   ElMessage.info('正在为您更换住宿...')
   
   try {
@@ -723,6 +751,8 @@ const handleRefreshHotels = async (day) => {
   } catch (error) {
     console.error('更换住宿失败:', error)
     ElMessage.error('更换住宿失败，请重试')
+  } finally {
+    isRefreshing.value.hotels = false
   }
 }
 
@@ -1467,10 +1497,55 @@ const printTrip = async () => {
   margin-bottom: 20px;
 }
 
+.restaurant-scroll-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
 .restaurant-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 4px;
+}
+
+.restaurant-list.is-overflow {
+  max-height: 276px; /* 约3个item的高度 (88px * 3 + 12px gap) */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #c0c4cc transparent;
+}
+
+.restaurant-list.is-overflow::-webkit-scrollbar {
+  width: 4px;
+}
+.restaurant-list.is-overflow::-webkit-scrollbar-track {
+  background: transparent;
+}
+.restaurant-list.is-overflow::-webkit-scrollbar-thumb {
+  background-color: #c0c4cc;
+  border-radius: 2px;
+}
+
+.list-more-hint {
+  text-align: center;
+  font-size: 12px;
+  color: #909399;
+  padding: 6px 0 2px;
+  line-height: 1.4;
+}
+
+.empty-hint {
+  padding: 16px 20px;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+  border-radius: 6px;
+  background: #fafafa;
+  margin-top: 8px;
 }
 
 .restaurant-item {

@@ -114,6 +114,7 @@ class LocationVerifyService {
           address: matchedPoi.address || location.address,
           latitude: matchedPoi.latitude,
           longitude: matchedPoi.longitude,
+          starRating: location.starRating,  // 保留AI返回的星级（高德POI无此字段）
           rating: matchedPoi.rating || location.rating,
           description: location.description || location.reason || matchedPoi.description || '',
           source: 'amap_verified'
