@@ -280,7 +280,7 @@ const submitQuickForm = async () => {
   setTimeout(() => updateProcessingStep(4), 8000)
   
   try {
-    const res = await chatAPI.sendMessageWithTrip(formMessage, sessionId.value, tripStore.tripId)
+    const res = await chatAPI.sendMessageWithTrip(formMessage, tripStore.tripId)
     
     isTyping.value = false
     
@@ -322,13 +322,7 @@ const submitQuickForm = async () => {
         ElMessage.info('正在根据您的需求调整行程...')
         setTimeout(async () => {
           try {
-            const adjustRes = await planAPI.generateItinerary('根据最新需求调整行程', sessionId.value, tripStore.tripId)
-            if (adjustRes.code === 200 && adjustRes.data && adjustRes.data.ready && adjustRes.data.itinerary && adjustRes.data.itinerary.length > 0) {
-              tripStore.setItinerary(adjustRes.data.itinerary)
-              tripStore.setTripId(adjustRes.data.tripId)
-              localStorage.setItem('currentTripId', adjustRes.data.tripId)
-              ElMessage.success('行程已根据您的需求调整')
-            }
+            const adjustRes = await planAPI.generateItinerary('根据最新需求调整行程', tripStore.tripId)
           } catch (error) {
             console.error('调整行程失败:', error)
             ElMessage.error('调整行程失败，请重试')
@@ -376,9 +370,9 @@ const sendMessageWithValue = async (text) => {
     
     let res
     if (isNaturalLanguagePlan) {
-      res = await planAPI.generateItinerary(text, sessionId.value, tripStore.tripId)
+      res = await planAPI.generateItinerary(text, tripStore.tripId)
     } else {
-      res = await chatAPI.sendMessageWithTrip(text, sessionId.value, tripStore.tripId)
+      res = await chatAPI.sendMessageWithTrip(text, tripStore.tripId)
     }
     
     isTyping.value = false
@@ -423,7 +417,7 @@ const sendMessageWithValue = async (text) => {
           ElMessage.info('正在根据您的需求调整行程...')
           setTimeout(async () => {
             try {
-              const adjustRes = await planAPI.generateItinerary('根据最新需求调整行程', sessionId.value, tripStore.tripId)
+              const adjustRes = await planAPI.generateItinerary('根据最新需求调整行程', tripStore.tripId)
               if (adjustRes.code === 200 && adjustRes.data && adjustRes.data.ready && adjustRes.data.itinerary && adjustRes.data.itinerary.length > 0) {
                 tripStore.setItinerary(adjustRes.data.itinerary)
                 tripStore.setTripId(adjustRes.data.tripId)

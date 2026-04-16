@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import api, { tripAPI } from '../api'
 
 export const useTripStore = defineStore('trip', () => {
   const tripParams = ref({
@@ -78,6 +79,7 @@ export const useTripStore = defineStore('trip', () => {
     integratedData.value = null
     conversationHistory.value = []
     routes.value = []
+    activities.value = []
     enhancedPlanning.value = null
   }
 
@@ -115,34 +117,31 @@ export const useTripStore = defineStore('trip', () => {
     if (!itinerary.value || itinerary.value.length === 0) {
       return { success: false, message: '没有可保存的行程' }
     }
-    
+
     try {
-      const sessionId = localStorage.getItem('sessionId')
       const saveData = getSaveData()
-      
-      const res = await fetch('/api/trips', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Session-Id': sessionId || ''
-        },
-        body: JSON.stringify({
-          tripId: tripId.value,
+
+      if (tripId.value) {
+        await tripAPI.update(tripId.value, {
+          requirements: saveData.params,
+          itinerary: saveData.itinerary,
+          conversationHistory: saveData.conversationHistory,
+          routes: saveData.routes
+        })
+      } else {
+        const res = await tripAPI.create({
           params: saveData.params,
           itinerary: saveData.itinerary,
           conversationHistory: saveData.conversationHistory,
           routes: saveData.routes
         })
-      }).then(r => r.json())
-      
-      if (res.code === 200) {
-        if (res.data?.tripId) {
+        if (res?.data?.tripId) {
           tripId.value = res.data.tripId
           localStorage.setItem('currentTripId', res.data.tripId)
         }
-        return { success: true, message: '自动保存成功' }
       }
-      return { success: false, message: res.message || '保存失败' }
+
+      return { success: true, message: '自动保存成功' }
     } catch (error) {
       console.error('自动保存失败:', error)
       return { success: false, message: '保存失败' }

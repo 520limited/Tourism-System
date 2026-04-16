@@ -46,7 +46,7 @@ import { useMapStore } from '../stores/map'
 import { useTripStore } from '../stores/trip'
 import { ElMessage } from 'element-plus'
 import { Loading, Warning, Location } from '@element-plus/icons-vue'
-import axios from 'axios'
+import api from '../api'
 
 const mapStore = useMapStore()
 const tripStore = useTripStore()
@@ -79,12 +79,12 @@ const initMap = async () => {
   error.value = ''
   
   try {
-    const configRes = await axios.get('/api/config/amap')
-    if (configRes.data?.code !== 200 || !configRes.data.data) {
+    const configRes = await api.get('/config/amap')
+    if (configRes.code !== 200 || !configRes.data) {
       throw new Error('获取地图配置失败')
     }
     
-    const { key, securityKey } = configRes.data.data
+    const { key, securityKey } = configRes.data
     
     window._AMapSecurityConfig = {
       securityJsCode: securityKey,

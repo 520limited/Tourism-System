@@ -113,10 +113,6 @@ export function storageRemove(key) {
   }
 }
 
-export function generateId() {
-  return 'id_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-}
-
 export function generateUUID() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID()

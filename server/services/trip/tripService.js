@@ -8,7 +8,6 @@ class TripService {
   constructor() {
     this.trips = new Map();
     this.tripNodes = new Map();
-    this.sharedTrips = new Map();
   }
 
   async createTrip(userId, params, itinerary, conversationHistory = [], routes = [], activities = [], sessionId = null, crowdPredictions = null, timeEstimates = null) {
@@ -142,14 +141,18 @@ class TripService {
       return {
         tripId: trip.id,
         userId: trip.user_id,
+        sessionId: trip.session_id,
         title: trip.title,
         requirements: JSON.parse(trip.requirements || '{}'),
         activities: JSON.parse(trip.activities || '[]'),
         itinerary: JSON.parse(trip.itinerary || '[]'),
         conversationHistory: JSON.parse(trip.conversation_history || '[]'),
         routes: JSON.parse(trip.routes || '[]'),
+        crowdPredictions: trip.crowd_predictions ? JSON.parse(trip.crowd_predictions) : null,
+        timeEstimates: trip.time_estimates ? JSON.parse(trip.time_estimates) : null,
+        userFeedback: trip.user_feedback ? JSON.parse(trip.user_feedback) : null,
         status: trip.status,
-        isFavorite: trip.is_favorite === 1,
+        isFavorite: !!trip.is_favorite,
         createdAt: trip.created_at,
         updatedAt: trip.updated_at
       };
@@ -279,6 +282,18 @@ class TripService {
       fields.push('status = ?');
       values.push(updates.status);
     }
+    if (updates.crowdPredictions !== undefined) {
+      fields.push('crowd_predictions = ?');
+      values.push(JSON.stringify(updates.crowdPredictions));
+    }
+    if (updates.timeEstimates !== undefined) {
+      fields.push('time_estimates = ?');
+      values.push(JSON.stringify(updates.timeEstimates));
+    }
+    if (updates.userFeedback !== undefined) {
+      fields.push('user_feedback = ?');
+      values.push(JSON.stringify(updates.userFeedback));
+    }
     if (updates.isFavorite !== undefined) {
       fields.push('is_favorite = ?');
       values.push(updates.isFavorite ? 1 : 0);
@@ -363,7 +378,7 @@ class TripService {
   }
 
   async favoriteTrip(tripId, isFavorite) {
-    return this.updateTrip(tripId, { status: isFavorite ? 'favorited' : 'saved' });
+    return this.updateTrip(tripId, { isFavorite });
   }
 
   async duplicateTrip(tripId, userId) {
@@ -373,7 +388,11 @@ class TripService {
       original.requirements,
       original.itinerary,
       original.conversationHistory,
-      original.routes
+      original.routes,
+      original.activities,
+      null,
+      original.crowdPredictions,
+      original.timeEstimates
     );
   }
 
@@ -396,16 +415,14 @@ class TripService {
   async generateShareLink(tripId) {
     const trip = await this.getTripById(tripId);
     const shareId = 'share_' + uuidv4().slice(0, 12);
-    
-    this.sharedTrips.set(shareId, {
-      tripId,
-      trip,
-      shareId,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      viewCount: 0
-    });
-    
+
+    // 写入数据库 shared_trips 表（而非内存 Map）
+    await dbRun(
+      `INSERT INTO shared_trips (share_id, trip_id, expires_at, view_count)
+       VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY), 0)`,
+      [shareId, tripId]
+    );
+
     return {
       shareId,
       link: `/trip/shared/${shareId}`,
@@ -414,18 +431,25 @@ class TripService {
   }
 
   async getSharedTrip(shareId) {
-    const shared = this.sharedTrips.get(shareId);
+    // 从数据库读取
+    const shared = await dbGet(
+      `SELECT * FROM shared_trips WHERE share_id = ? AND expires_at > NOW()`,
+      [shareId]
+    );
+
     if (!shared) {
       throw new Error('分享链接不存在或已过期');
     }
-    
-    if (new Date() > shared.expiresAt) {
-      this.sharedTrips.delete(shareId);
-      throw new Error('分享链接已过期');
+
+    // 更新浏览计数
+    await dbRun(`UPDATE shared_trips SET view_count = view_count + 1 WHERE share_id = ?`, [shareId]);
+
+    // 返回关联的行程数据
+    const tripData = await this.getTripById(shared.trip_id);
+    if (!tripData) {
+      throw new Error('关联的行程不存在');
     }
-    
-    shared.viewCount++;
-    return shared.trip;
+    return tripData;
   }
 
   async getTripStats(userId, sessionId = null) {

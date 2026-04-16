@@ -743,7 +743,7 @@ ${itinerary.map((day, index) =>
 请只输出JSON数据，不要输出任何其他文字。`;
 
     try {
-      const webSearchService = require('./webSearchService');
+      const webSearchService = require('../external/webSearchService');
       const aiResponse = await webSearchService.callQwenAPI([
         { role: 'system', content: '你是一位专业的旅游需求分析专家，能够从用户的自然语言输入中提取结构化的旅游相关标签。' },
         { role: 'user', content: prompt }

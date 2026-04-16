@@ -1,8 +1,8 @@
 const rateLimit = require('express-rate-limit');
 
 const limiter = rateLimit({
-  windowMs: 1000,
-  max: 10,
+  windowMs: 60000,
+  max: 200,
   message: {
     code: 'RATE_LIMIT_EXCEEDED',
     message: '请求过于频繁，请稍后再试'

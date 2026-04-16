@@ -34,31 +34,13 @@ api.interceptors.response.use(
 )
 
 export const chatAPI = {
-  sendMessage: (data, sessionId) => {
-    const config = {}
-    if (sessionId) {
-      config.headers = { 'X-Session-Id': sessionId }
-    }
-    return api.post('/chat', data, config)
-  },
-  sendMessageWithTrip: (message, sessionId, tripId) => {
-    const config = {}
-    if (sessionId) {
-      config.headers = { 'X-Session-Id': sessionId }
-    }
-    return api.post('/chat', { message, tripId }, config)
-  },
+  sendMessage: (data) => api.post('/chat', data),
+  sendMessageWithTrip: (message, tripId) => api.post('/chat', { message, tripId }),
   getHistory: (conversationId) => api.get(`/chat/history/${conversationId}`)
 }
 
 export const planAPI = {
-  generateItinerary: (message, sessionId, tripId) => {
-    const config = {}
-    if (sessionId) {
-      config.headers = { 'X-Session-Id': sessionId }
-    }
-    return api.post('/plan', { message, tripId }, config)
-  },
+  generateItinerary: (message, tripId) => api.post('/plan', { message, tripId }),
   refreshAttractions: (currentAttractions, sessionId, hotelArea) => {
     return api.post('/refresh/attractions', { currentAttractions, sessionId, hotelArea })
   },
@@ -77,13 +59,7 @@ export const planAPI = {
   refreshHotels: (currentHotels, sessionId, hotelArea, currentDay) => {
     return api.post('/refresh/hotels', { currentHotels, sessionId, hotelArea, currentDay })
   },
-  generateTransportation: (sessionId) => {
-    const config = {}
-    if (sessionId) {
-      config.headers = { 'X-Session-Id': sessionId }
-    }
-    return api.post('/transportation', { sessionId }, config)
-  }
+  generateTransportation: () => api.post('/transportation', {})
 }
 
 export const tripAPI = {

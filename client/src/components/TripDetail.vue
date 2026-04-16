@@ -683,9 +683,10 @@ const handleRefreshHotels = async (day) => {
     }
     
     const res = await planAPI.refreshHotels(
-      allExistingNames, 
+      allExistingNames,
       sessionId,
-      tripStore.tripParams.hotelArea
+      tripStore.tripParams.hotelArea,
+      day
     )
     
     if (res.code === 200 && res.data && res.data.hotels) {
