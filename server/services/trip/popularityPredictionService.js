@@ -1,3 +1,40 @@
+/**
+ * @fileoverview 景点热度预测与时间优化服务 - 多因子加权的人流拥挤度预估系统
+ * 
+ * @module popularityPredictionService
+ * @description 本模块基于多维度因子预测长沙各景点在不同时间段的人流拥挤程度,
+ *              并提供游览时长预估、最佳时段推荐、行程调度优化等智能功能。
+ *              是实现"智能错峰游览"推荐的核心算法模块。
+ * 
+ * 三层数据源(Fallback降级策略):
+ *   Layer1: dynamicPopularityService - 动态画像(实时搜索高德POI获取热度)
+ *   Layer2: 内置默认字典 - 50+长沙热门景点预定义基础画像
+ *   Layer3: 兜底默认值 - 通用景点平均参数
+ * 
+ * 核心预测公式:
+ *   crowdLevel = baseLevel × weekendMultiplier(holidayMultiplier) × hourFactor
+ *   结果归一化到 [0.1, 1.0] 区间,映射为5级状态: 空闲/较少/适中/较多/拥挤
+ * 
+ * 内置10大热门景点画像: 橘子洲/岳麓山/省博物馆/太平老街/IFS/黄兴路步行街/
+ *                        岳麓书院/杜甫江阁/世界之窗/烈士公园
+ * 
+ * 节假日数据: 2026年完整节假日表(元旦/春节/清明/劳动节/端午/国庆)
+ * 
+ * 主要API:
+ *   predictCrowdLevel(name, date, hour)    单景点单时段拥挤度预测
+ *   estimateVisitDuration(name, options)   游览时长估算(含人群/团体因子)
+ *   getBestVisitTime(name, date)           最佳游览时段推荐
+ *   predictDaySchedule(attractions, date)  一日行程时间表生成
+ *   optimizeScheduleForCrowd(...)         避峰调度优化(贪心算法)
+ *   generateCrowdPrompt(...)               为AI Prompt生成热度文本摘要
+ * 
+ * @requires ../../database/db 数据库访问层
+ * @requires ../logger 日志服务
+ * @requires ./dynamicPopularityService 动态热度服务
+ */
+const { dbRun, dbGet, dbAll } = require('../../database/db');
+const logger = require('../logger');
+const dynamicPopularityService = require('./dynamicPopularityService');
 const { dbRun, dbGet, dbAll } = require('../../database/db');
 const logger = require('../logger');
 const dynamicPopularityService = require('./dynamicPopularityService');
@@ -144,7 +181,16 @@ class PopularityPredictionService {
     return this.findAttractionProfileSync(attractionName, attractionData);
   }
 
-  predictCrowdLevel(attractionName, date, hour, attractionData = null) {
+  /**
+   * predictCrowdLevel — 单景点单时段拥挤度预测核心算法
+   * 
+   * 预测公式:
+   *   crowdLevel = basePopularity × dateMultiplier × hourFactor
+   *   其中: dateMultiplier ∈ {1.0(工作日), 1.4(周末), 1.8~2.5(节假日)}
+   *         hourFactor ∈ {0.6(低谷), 1.0(正常), 1.3(高峰)}
+   * 
+   * 最终值裁剪到 [0.1, 1.0] 并映射为5级状态标签+颜色编码
+   */
     const profile = this.findAttractionProfileSync(attractionName, attractionData);
     if (!profile) {
       return this.getDefaultPrediction(date, hour);
@@ -295,7 +341,17 @@ class PopularityPredictionService {
     return '建议选择工作日或其他时段游览';
   }
 
-  estimateVisitDuration(attractionName, options = {}) {
+  /**
+   * estimateVisitDuration — 多因子游览时长估算
+   * 
+   * 在基础时长上叠加多个调整因子:
+   *   - 人流因子: +0%~+50% (越拥挤排队越久)
+   *   - 团体类型: 独行-20% / 情侣基准 / 家庭+30% / 朋友+10%
+   *   - 特殊情况: 携带儿童+25%, 携带老人+15%
+   *   - 场地特征: 大面积景区+10%
+   * 
+   * 结果四舍五入到5分钟整数倍,返回区间估计[min,max]
+   */
     const { crowdLevel = 0.5, groupType = 'couple', withKids = false, withElderly = false } = options;
     
     const profile = this.findAttractionProfileSync(attractionName);
@@ -438,7 +494,14 @@ class PopularityPredictionService {
     return schedule;
   }
 
-  optimizeScheduleForCrowd(attractions, date, preferences = {}) {
+  /**
+   * optimizeScheduleForCrowd — 避峰调度优化算法(贪心策略)
+   * 
+   * 目标: 为N个景点分配最优游览时段,使整体拥挤度最低
+   * 算法: 每轮在所有未安排景点×可用时隙中选择crowdLevel最低的组合
+   * 约束: 高峰时段(level>0.8)自动排除;每个景点占用连续时间段
+   * 复杂度: O(N² × T), N=景点数, T=时隙数
+   */
     const { earliestHour = 8, latestHour = 20, avoidHighCrowd = true } = preferences;
     
     const timeSlots = [];
@@ -505,7 +568,12 @@ class PopularityPredictionService {
   /**
    * 为 AI Prompt 生成热度预测信息
    */
-  generateCrowdPrompt(attractions, date) {
+  /**
+   * generateCrowdPrompt — 为AI System Prompt生成热度预测文本摘要
+   * 
+   * 将数值化的拥挤度预测转换为自然语言描述,
+   * 注入AI提示词中让模型在生成行程时自动避开高峰时段
+   */
     const dateInfo = this.analyzeDate(date);
     let prompt = '\n【热度预测信息】';
 

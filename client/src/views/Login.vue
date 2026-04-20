@@ -1,4 +1,14 @@
 <template>
+    - 注册功能: 邮箱验证码(60s倒计时) + 密码确认 → 创建账户 → 自动切换到登录Tab
+    - 表单校验: 自定义validator实现邮箱格式、密码长度、确认密码一致性校验
+    - 游客模式: 无需任何认证直接进入主页
+  
+  UI框架: Element Plus (el-tabs/el-form/el-input/el-button)
+  
+  状态管理: Pinia (useUserStore) 持久化用户信息
+  
+  API依赖: userAPI (sendCode/login/register)
+-->
   <div class="login-page">
     <div class="login-container">
       <div class="left-section">
@@ -73,13 +83,32 @@
 </template>
 
 <script setup>
+/**
+ * @fileoverview 用户登录/注册页面组件
+ * 
+ * @component Login
+ * @description 本组件是系统的身份认证入口,提供邮箱+密码登录和邮箱验证码注册两种方式。
+ *              采用左右分栏布局:左侧展示系统特色介绍,右侧为交互式表单区域。
+ *              支持游客免登录体验模式。
+ * 
+ * 核心功能:
+ *   - 登录功能: 邮箱+密码校验 → 获取sessionId → 存储到localStorage/Pinia → 跳转目标页
+ *   - 注册功能: 邮箱验证码(60s倒计时) + 密码确认 → 创建账户 → 自动切换到登录Tab
+ *   - 表单校验: 自定义validator实现邮箱格式、密码长度、确认密码一致性校验
+ *   - 游客模式: 无需任何认证直接进入主页
+ * 
+ * UI框架: Element Plus (el-tabs/el-form/el-input/el-button)
+ * 状态管理: Pinia (useUserStore) 持久化用户信息
+ * API依赖: userAPI (sendCode/login/register)
+ */
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
 import { userAPI } from '../api'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const activeTab = ref('login')
@@ -145,7 +174,12 @@ const registerForm = reactive({
   confirmPassword: ''
 })
 
-const sendCode = async () => {
+/**
+ * sendCode — 发送邮箱验证码(注册用)
+ * 
+ * 流程: 校验邮箱格式 → 调用API → 成功后启动60秒倒计时
+ * 防重复: 倒计时期间禁用按钮
+ */
   if (!registerForm.email) {
     ElMessage.warning('请先输入邮箱')
     return
@@ -180,7 +214,12 @@ const sendCode = async () => {
   }
 }
 
-const handleLogin = async () => {
+/**
+ * handleLogin — 用户登录处理
+ * 
+ * 完整流程: 表单校验 → 调用login API → 存储sessionId到localStorage
+ *           → 更新Pinia用户状态 → 跳转(优先回到原页面或首页)
+ */
   if (!loginFormRef.value) return
   
   await loginFormRef.value.validate(async (valid) => {
@@ -194,7 +233,9 @@ const handleLogin = async () => {
         localStorage.setItem('sessionId', res.data.sessionId)
         userStore.setUser(res.data.user)
         ElMessage.success('登录成功')
-        router.push('/')
+        // 登录后跳回原页面（如果有 redirect 参数）
+        const redirect = route.query.redirect || '/'
+        router.push(redirect)
       } else {
         ElMessage.error(res.message || '登录失败')
       }
@@ -207,7 +248,12 @@ const handleLogin = async () => {
   })
 }
 
-const handleRegister = async () => {
+/**
+ * handleRegister — 用户注册处理
+ * 
+ * 流程: 表单校验(含验证码+密码一致性) → 调用register API
+ *       成功后自动切换到登录Tab并预填邮箱
+ */
   if (!registerFormRef.value) return
   
   await registerFormRef.value.validate(async (valid) => {

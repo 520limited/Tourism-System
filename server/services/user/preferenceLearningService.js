@@ -1,3 +1,41 @@
+/**
+ * @fileoverview 用户偏好学习引擎 - 基于行为数据的个性化画像构建系统
+ * 
+ * @module preferenceLearningService
+ * @description 本模块通过采集和分析用户在平台上的各类操作行为,构建多维度的用户偏好画像,
+ *              实现个性化推荐。是将"通用AI推荐"升级为"千人千面"的关键服务。
+ * 
+ * 工作机制(闭环流程):
+ *   ┌──────────┐     ┌───────────┐     ┌──────────────┐     ┌──────────┐
+ *   │ 用户操作 │ ──→ │ 记录行为  │ ──→ │ 加权更新画像 │ ──→ │ 注入AI   │
+ *   │浏览/收藏 │     │DB持久化  │     │ 6维度累加    │     │ Prompt   │
+ *   └──────────┘     └───────────┘     └──────────────┘     └──────────┘
+ * 
+ * 行为类型及权重分配:
+ *   正向权重: view(+1) click(+2) favorite(+5) visit(+8) book(+10) share(+6) rate_positive(+7)
+ *   负向权重: rate_negative(-5) refresh_skip(-2) remove(-3)
+ * 
+ * 六个画像维度(带权重占比):
+ *   attractionType(25%) - 景点类型偏好(自然/人文/娱乐...)
+ *   priceRange(20%)      - 价格区间偏好(免费/低价/中等/高价)
+ *   cuisineType(15%)     - 菜系口味偏好(湘菜/小吃/西餐...)
+ *   hotelStar(15%)       - 酒店档次偏好(3星/4星/5星)
+ *   region(15%)          - 区域位置偏好(五一广场/岳麓区...)
+ *   activityType(10%)    - 活动类型偏好
+ * 
+ * 置信度分级:
+ *   totalBehaviors < 5  → low(数据不足,不启用个性化)
+ *   totalBehaviors < 20 → medium(初步画像,辅助参考)
+ *   totalBehaviors >= 20 → high(可靠画像,强力引导AI)
+ * 
+ * 核心输出: generatePreferencePrompt(userId) → 文本化的用户偏好描述,
+ *           直接拼接到 qwenAIService 的 systemPrompt 中影响AI决策
+ * 
+ * 数据存储: user_behaviors(原始行为) + user_preference_profiles(聚合画像)
+ * 
+ * @requires ../../database/db 数据库访问层(dbRun/dbGet/dbAll)
+ * @requires ../logger 日志服务
+ */
 const { dbRun, dbGet, dbAll } = require('../../database/db');
 const logger = require('../logger');
 
@@ -13,7 +51,15 @@ class PreferenceLearningService {
     };
   }
 
-  async recordBehavior(userId, behavior) {
+  /**
+   * recordBehavior — 记录单次用户行为并触发画像更新
+   * 
+   * 这是偏好学习的"数据采集入口",每次用户操作都应调用此方法:
+   *   浏览景点(view)、收藏(favorite)、评分(rate_positive/negative)、
+   *   跳过刷新(refresh_skip)、删除(remove)等
+   * 
+   * 执行流程: 写入user_behaviors表 → 加权更新preference_profiles表
+   */
     const { type, itemType, itemData, context } = behavior;
     const behaviorId = `bh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -42,7 +88,17 @@ class PreferenceLearningService {
     }
   }
 
-  async updatePreferenceProfile(userId, behavior) {
+  /**
+   * updatePreferenceProfile — 核心画像更新算法(加权累加)
+   * 
+   * 根据行为类型和操作对象,将权重值累加到对应的6个维度:
+   *   - 景点操作 → attractionTypes + regions + priceRanges
+   *   - 餐厅操作 → cuisineTypes + restaurantPriceRanges
+   *   - 酒店操作 → hotelStars + hotelPriceRanges
+   *   - 兴趣标签 → interests (半权重0.5)
+   * 
+   * 每次调用后立即持久化到数据库,保证实时性
+   */
     try {
       let profile = await this.getUserProfile(userId);
       if (!profile) {
@@ -293,7 +349,18 @@ class PreferenceLearningService {
     return 'high';
   }
 
-  async generatePreferencePrompt(userId) {
+  /**
+   * generatePreferencePrompt — 将结构化画像转为AI可读的文本提示
+   * 
+   * 输出格式示例:
+   *   【用户偏好画像】
+   *   偏好景点类型: 自然风光、人文历史
+   *   偏好区域: 岳麓区、五一广场
+   *   偏好菜系: 湘菜、小吃
+   *   兴趣标签: 美食、摄影
+   * 
+   * 此文本直接拼接至qwenAIService的systemPrompt,影响AI推荐决策
+   */
     try {
       const profile = await this.getUserProfile(userId);
       if (!profile) {
