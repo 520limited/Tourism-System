@@ -50,41 +50,7 @@
       
       <div class="profile-main">
         <StatsDashboard :stats="dashboardStats" />
-        
-        <div class="stats-section">
-          <div class="section-title">使用统计</div>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-icon"><el-icon><MapLocation /></el-icon></div>
-              <div class="stat-content">
-                <div class="stat-value">{{ stats.totalTrips }}</div>
-                <div class="stat-label">行程总数</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon attraction"><el-icon><Location /></el-icon></div>
-              <div class="stat-content">
-                <div class="stat-value">{{ stats.favoriteAttractions }}</div>
-                <div class="stat-label">收藏景点</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon restaurant"><el-icon><Star /></el-icon></div>
-              <div class="stat-content">
-                <div class="stat-value">{{ stats.favoriteRestaurants }}</div>
-                <div class="stat-label">收藏美食</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon hotel"><el-icon><House /></el-icon></div>
-              <div class="stat-content">
-                <div class="stat-value">{{ stats.favoriteHotels }}</div>
-                <div class="stat-label">收藏住宿</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
+
         <div class="preferences-section">
           <div class="section-title">当前偏好</div>
           <div class="preferences-grid">
@@ -173,7 +139,7 @@ import { ref, reactive, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useTripStore } from '../stores/trip'
-import { userAPI, tripAPI } from '../api'
+import { userAPI, tripAPI, preferenceAPI } from '../api'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Edit, Document, Star, Setting, Lock, SwitchButton, MapLocation, Location, House } from '@element-plus/icons-vue'
 import StatsDashboard from '../components/StatsDashboard.vue'
@@ -199,6 +165,8 @@ const stats = reactive({
   monthlyTrips: {}
 })
 
+const preferenceProfile = ref(null)
+
 const totalFavorites = computed(() => 
   stats.favoriteAttractions + stats.favoriteRestaurants + stats.favoriteHotels
 )
@@ -209,7 +177,8 @@ const dashboardStats = computed(() => ({
   totalAttractions: stats.favoriteAttractions,
   totalRestaurants: stats.favoriteRestaurants,
   crowdTypes: stats.crowdTypes,
-  monthlyTrips: stats.monthlyTrips
+  monthlyTrips: stats.monthlyTrips,
+  preferenceProfile: preferenceProfile.value
 }))
 
 const editForm = reactive({
@@ -291,6 +260,16 @@ const loadStats = async () => {
     if (statsRes.code === 200 && statsRes.data) {
       stats.crowdTypes = statsRes.data.crowdTypes || {}
       stats.monthlyTrips = statsRes.data.monthlyTrips || {}
+    }
+    
+    // 加载偏好画像数据
+    try {
+      const prefRes = await preferenceAPI.getProfile()
+      if (prefRes.code === 200 && prefRes.data) {
+        preferenceProfile.value = prefRes.data
+      }
+    } catch (e) {
+      // 未登录或无画像数据，忽略
     }
   } catch (error) {
     console.error('加载统计数据失败:', error)

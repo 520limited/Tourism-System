@@ -106,19 +106,19 @@ const defaultProfiles = {
   }
 };
 
-const holidays2025 = [
-  { date: '2025-01-01', name: '元旦' },
-  { date: '2025-01-28', name: '春节', duration: 7 },
-  { date: '2025-04-04', name: '清明节', duration: 3 },
-  { date: '2025-05-01', name: '劳动节', duration: 5 },
-  { date: '2025-05-31', name: '端午节', duration: 3 },
-  { date: '2025-10-01', name: '国庆节', duration: 7 }
+const holidays2026 = [
+  { date: '2026-01-01', name: '元旦' },
+  { date: '2026-02-17', name: '春节', duration: 7 },
+  { date: '2026-04-05', name: '清明节', duration: 3 },
+  { date: '2026-05-01', name: '劳动节', duration: 5 },
+  { date: '2026-06-19', name: '端午节', duration: 3 },
+  { date: '2026-10-01', name: '国庆节', duration: 7 }
 ];
 
 class PopularityPredictionService {
   constructor() {
     this.attractionProfiles = defaultProfiles;
-    this.holidays = holidays2025;
+    this.holidays = holidays2026;
   }
 
   findAttractionProfileSync(attractionName, attractionData = null) {
@@ -502,49 +502,13 @@ class PopularityPredictionService {
     return optimizedSchedule.sort((a, b) => a.suggestedStartTime - b.suggestedStartTime);
   }
 
-  async saveAttractionPopularity(attractionName, data) {
-    const id = `pop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    try {
-      await dbRun(
-        `INSERT INTO attraction_popularity 
-         (id, attraction_name, popularity_data, updated_at) 
-         VALUES (?, ?, ?, NOW())
-         ON DUPLICATE KEY UPDATE popularity_data = VALUES(popularity_data), updated_at = NOW()`,
-        [id, attractionName, JSON.stringify(data)]
-      );
-      
-      return { success: true };
-    } catch (error) {
-      logger.error(`保存热度数据失败: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async getAttractionPopularity(attractionName) {
-    try {
-      const row = await dbGet(
-        'SELECT * FROM attraction_popularity WHERE attraction_name = ?',
-        [attractionName]
-      );
-      
-      if (row) {
-        return {
-          ...row,
-          popularity_data: JSON.parse(row.popularity_data || '{}')
-        };
-      }
-      return null;
-    } catch (error) {
-      logger.error(`获取热度数据失败: ${error.message}`);
-      return null;
-    }
-  }
-
+  /**
+   * 为 AI Prompt 生成热度预测信息
+   */
   generateCrowdPrompt(attractions, date) {
     const dateInfo = this.analyzeDate(date);
     let prompt = '\n【热度预测信息】';
-    
+
     if (dateInfo.isHoliday) {
       prompt += `\n今日为${dateInfo.holidayName}假期，景区人流较大`;
     } else if (dateInfo.isWeekend) {
@@ -552,9 +516,9 @@ class PopularityPredictionService {
     } else {
       prompt += '\n今日为工作日，景区人流相对较少';
     }
-    
+
     prompt += '\n\n各景点热度预测：';
-    
+
     for (const attraction of attractions.slice(0, 5)) {
       const prediction = this.predictCrowdLevel(attraction.name, date, 10);
       prompt += `\n- ${attraction.name}: ${prediction.status} (${Math.round(prediction.level * 100)}%)`;
@@ -562,7 +526,7 @@ class PopularityPredictionService {
         prompt += `，${prediction.recommendation}`;
       }
     }
-    
+
     return prompt;
   }
 }

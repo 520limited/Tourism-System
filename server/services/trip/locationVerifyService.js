@@ -19,11 +19,13 @@ class LocationVerifyService {
     
     for (const day of itinerary) {
       logger.info(`--- 验证第 ${day.day} 天的地点 ---`);
-      
-      // 串行验证，避免并发请求过多触发高德API限制
-      const verifiedAttractions = await this.verifyAttractions(day.attractions || []);
-      const verifiedRestaurants = await this.verifyRestaurants(day.restaurants || []);
-      const verifiedHotels = await this.verifyHotels(day.hotels || []);
+
+      // 同一天的景点/餐厅/酒店之间无依赖，可并行（内部由 limiter 控制速率）
+      const [verifiedAttractions, verifiedRestaurants, verifiedHotels] = await Promise.all([
+        this.verifyAttractions(day.attractions || []),
+        this.verifyRestaurants(day.restaurants || []),
+        this.verifyHotels(day.hotels || [])
+      ]);
       
       const dayVerified = verifiedAttractions.filter(a => a.source === 'amap_verified').length +
                          verifiedRestaurants.filter(r => r.source === 'amap_verified').length +

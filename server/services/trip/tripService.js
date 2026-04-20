@@ -6,8 +6,7 @@ const logger = require('../logger');
 
 class TripService {
   constructor() {
-    this.trips = new Map();
-    this.tripNodes = new Map();
+    // 内存缓存已移除：所有数据通过数据库持久化，避免内存泄漏
   }
 
   async createTrip(userId, params, itinerary, conversationHistory = [], routes = [], activities = [], sessionId = null, crowdPredictions = null, timeEstimates = null) {
@@ -99,35 +98,6 @@ class TripService {
       logger.error(`获取交通路线失败: ${error.message}`);
       return [];
     }
-  }
-
-  async saveTripNodes(tripId, itinerary) {
-    const nodes = [];
-    let nodeId = 1;
-
-    itinerary.forEach((dayPlan) => {
-      dayPlan.attractions.forEach((attr, idx) => {
-        const node = {
-          nodeId: `n_${tripId}_${nodeId++}`,
-          tripId,
-          day: dayPlan.day,
-          timeSlot: attr.bestTime || '上午',
-          attractionId: attr.id || attr.attraction_id,
-          name: attr.name,
-          latitude: attr.latitude,
-          longitude: attr.longitude,
-          durationHours: attr.estimatedDuration || attr.suggestedDuration || 2,
-          transportInfo: attr.transportInfo || '',
-          cost: attr.ticketPrice || attr.cost || 0,
-          sortOrder: idx + 1,
-          createdAt: new Date()
-        };
-        nodes.push(node);
-        this.tripNodes.set(node.nodeId, node);
-      });
-    });
-
-    return nodes;
   }
 
   async getTripById(tripId) {
@@ -317,10 +287,6 @@ class TripService {
     }
   }
 
-  async updateTripItinerary(tripId, itinerary) {
-    return this.updateTrip(tripId, { itinerary });
-  }
-
   async saveConversationMessage(tripId, role, content) {
     try {
       const trip = await this.getTripById(tripId);
@@ -336,36 +302,6 @@ class TripService {
     }
   }
 
-  async saveRoute(tripId, day, routeType, origin, destination, routeData) {
-    try {
-      const trip = await this.getTripById(tripId);
-      const routes = trip.routes || [];
-      
-      routes.push({
-        id: uuidv4(),
-        day,
-        routeType,
-        origin: {
-          name: origin.name,
-          coord: origin.coord
-        },
-        destination: {
-          name: destination.name,
-          coord: destination.coord
-        },
-        routeData,
-        timestamp: new Date().toISOString()
-      });
-      
-      await this.updateTrip(tripId, { routes });
-      
-      return routes;
-    } catch (error) {
-      logger.error(`保存路径失败: ${error.message}`);
-      throw error;
-    }
-  }
-
   async deleteTrip(tripId) {
     try {
       await dbRun('DELETE FROM trips WHERE id = ?', [tripId]);
@@ -377,39 +313,11 @@ class TripService {
     }
   }
 
-  async favoriteTrip(tripId, isFavorite) {
-    return this.updateTrip(tripId, { isFavorite });
-  }
-
-  async duplicateTrip(tripId, userId) {
-    const original = await this.getTripById(tripId);
-    return this.createTrip(
-      userId,
-      original.requirements,
-      original.itinerary,
-      original.conversationHistory,
-      original.routes,
-      original.activities,
-      null,
-      original.crowdPredictions,
-      original.timeEstimates
-    );
-  }
-
   generateTripTitle(params) {
     const safeParams = params || {};
     const days = safeParams.days || 3;
     const crowd = safeParams.crowd || '';
     return `${days}天${crowd ? crowd + '' : ''}长沙深度游`;
-  }
-
-  async exportTrip(tripId, format = 'pdf') {
-    const trip = await this.getTripById(tripId);
-    return {
-      format,
-      trip,
-      exportDate: new Date()
-    };
   }
 
   async generateShareLink(tripId) {

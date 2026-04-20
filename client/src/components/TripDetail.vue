@@ -379,7 +379,7 @@ import { ref, computed, watch, nextTick, reactive, onMounted } from 'vue'
 import { useTripStore } from '../stores/trip'
 import { useMapStore } from '../stores/map'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { planAPI, preferenceAPI, popularityAPI } from '../api'
+import { planAPI, preferenceAPI } from '../api'
 import { Sunny, Location, Clock, Star, Ticket, Food, MapLocation, Collection, Loading, House, Refresh, Warning, StarFilled, Check } from '@element-plus/icons-vue'
 
 const tripStore = useTripStore()
@@ -392,7 +392,6 @@ const selectedHotel = ref(null)
 const selectedCuisine = ref('all')
 const selectedHotelStar = ref('all')
 const isRefreshing = ref({ attractions: false, restaurants: false, hotels: false })
-const crowdOverview = ref(null)
 const userPreference = ref(null)
 
 watch(() => tripStore.itinerary, (itinerary) => {
@@ -825,7 +824,10 @@ const checkFavoriteStatus = async () => {
   }
   
   try {
-    const res = await fetch(`/api/trips/${tripId}`)
+    const res = await fetch(`/api/trips/${tripId}`, {
+      headers: { 'X-Session-Id': localStorage.getItem('sessionId') || '' }
+    }).then(r => r.json())
+    
     if (res.code === 200 && res.data) {
       isTripFavorited.value = res.data.isFavorite === true
     }
@@ -1025,24 +1027,10 @@ const recordClickBehavior = async (itemType, itemData) => {
   }
 }
 
-const loadCrowdOverview = async () => {
-  if (!tripStore.itinerary || tripStore.itinerary.length === 0) return
-  
-  try {
-    const res = await popularityAPI.getOverview({
-      itinerary: tripStore.itinerary
-    })
-    if (res.code === 200 && res.data) {
-      crowdOverview.value = res.data.overview
-    }
-  } catch (error) {
-    console.error('加载热度概览失败:', error)
-  }
-}
-
 onMounted(() => {
   loadFavorites()
   loadUserPreference()
+  checkFavoriteStatus()
 })
 
 loadFavorites()

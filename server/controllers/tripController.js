@@ -59,8 +59,8 @@ router.post('/transport/recommend', async (req, res) => {
   try {
     const { from, to, preferences } = req.body;
     if (!from || !to) return res.status(400).json({ code: 400, message: '缺少起点或终点' });
-    const recommendations = smartPlanningService.recommendTransportation(from, to, preferences);
-    res.json({ code: 200, data: { recommendations, bestOption: recommendations[0] } });
+    const recommendations = await smartPlanningService.recommendTransportation(from, to, preferences);
+    res.json({ code: 200, data: { recommendations, bestOption: (recommendations || [])[0] } });
   } catch (error) {
     logger.error(`获取交通推荐失败: ${error.message}`);
     res.status(500).json({ code: 500, message: '获取交通推荐失败' });

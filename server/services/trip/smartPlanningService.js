@@ -6,16 +6,7 @@ const logger = require('../logger');
  * 所有数据通过API实时获取，禁止固定数据
  */
 class SmartPlanningService {
-  constructor() {
-    // 仅保留算法阈值，不涉及具体业务数据
-    this.transportThresholds = {
-      walk: 1000,
-      bike: 3000,
-      subway: 8000,
-      taxi: 15000,
-      drive: Infinity
-    };
-  }
+  constructor() {}
 
   /**
    * 智能路线优化
@@ -244,23 +235,35 @@ class SmartPlanningService {
     for (const day of itinerary) {
       if (day.attractions && day.attractions.length > 1) {
         const dayTransports = [];
-        
+
+        // 并行计算所有相邻景点对的交通推荐（替代串行循环）
+        const transportTasks = [];
         for (let i = 0; i < day.attractions.length - 1; i++) {
           const from = day.attractions[i];
           const to = day.attractions[i + 1];
-          
           if (from?.latitude && to?.latitude) {
-            logger.info(`计算交通: ${from.name} -> ${to.name}`);
-            const transport = await this.recommendTransportation(from, to, preferences);
-            logger.info(`交通推荐结果: ${JSON.stringify(transport)}`);
-            if (transport && transport.length > 0) {
-              dayTransports.push({
-                from: from.name,
-                to: to.name,
-                recommendations: transport,
-                best: transport[0]
-              });
-            }
+            transportTasks.push(
+              this.recommendTransportation(from, to, preferences)
+                .then(transport => ({ from: from.name, to: to.name, transport, index: i }))
+                .catch(err => {
+                  logger.warn(`交通推荐失败 ${from.name}->${to.name}: ${err.message}`);
+                  return { from: from.name, to: to.name, transport: [], index: i };
+                })
+            );
+          }
+        }
+
+        const results = await Promise.all(transportTasks);
+        // 按原始顺序排列
+        results.sort((a, b) => a.index - b.index);
+        for (const { from, to, transport } of results) {
+          if (transport && transport.length > 0) {
+            dayTransports.push({
+              from,
+              to,
+              recommendations: transport,
+              best: transport[0]
+            });
           }
         }
         

@@ -12,10 +12,49 @@ const refreshService = require('../services/trip/refreshService');
 const userService = require('../services/user/userService');
 const logger = require('../services/logger');
 
-const sessions = new Map();
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2小时TTL，防止内存泄漏
+const CLEANUP_INTERVAL = 30 * 60 * 1000; // 每30分钟清理一次
+
+class SessionManager {
+  constructor() {
+    this.sessions = new Map();
+    // 定期清理过期会话
+    this._cleanupTimer = setInterval(() => this._cleanup(), CLEANUP_INTERVAL);
+    // 不让定时器阻止进程退出
+    this._cleanupTimer.unref?.();
+  }
+
+  get(id) {
+    const entry = this.sessions.get(id);
+    if (entry && (Date.now() - entry.lastAccess > SESSION_TTL_MS)) {
+      this.sessions.delete(id);
+      return undefined;
+    }
+    if (entry) entry.lastAccess = Date.now();
+    return entry ? entry.data : undefined;
+  }
+
+  set(id, data) {
+    this.sessions.set(id, { data, lastAccess: Date.now() });
+  }
+
+  _cleanup() {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [id, entry] of this.sessions) {
+      if (now - entry.lastAccess > SESSION_TTL_MS) {
+        this.sessions.delete(id);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) logger.info(`Session清理: 移除${cleaned}个过期会话`);
+  }
+}
+
+const sessionManager = new SessionManager();
 
 // 公开会话引用（供其他模块如 popularityController 访问 enhanced 数据）
-const getSession = (id) => sessions.get(id);
+const getSession = (id) => sessionManager.get(id);
 
 /**
  * 公共辅助函数：处理 AI 生成的行程结果
@@ -117,20 +156,20 @@ router.post('/plan', async (req, res) => {
 
     if (!message?.trim()) return res.status(400).json({ code: 400, message: '请输入您的旅行需求' });
 
-    let session = sessions.get(sessionId) || { history: [], requirements: {}, itinerary: [], status: 'planning' };
+    let session = sessionManager.get(sessionId) || { history: [], requirements: {}, itinerary: [], status: 'planning' };
     await loadExistingTrip(session, existingTripId);
     session.history.push({ role: 'user', content: message });
 
-    // AI 生成行程
-    const aiResult = await qwenAIService.generateTripFromNaturalLanguage(message, session.history);
-    if (!aiResult.ready || aiResult.error) {
-      return res.status(500).json({ code: 500, message: '行程生成失败，请重试' });
-    }
-
-    // 获取用户ID
+    // 获取用户ID（必须在AI调用之前，用于加载用户偏好画像）
     let userId = null;
     const user = await userService.getUserBySession(sessionId);
     if (user) userId = user.userId;
+
+    // AI 生成行程（传入userId以加载用户偏好）
+    const aiResult = await qwenAIService.generateTripFromNaturalLanguage(message, session.history, null, userId);
+    if (!aiResult.ready || aiResult.error) {
+      return res.status(500).json({ code: 500, message: '行程生成失败，请重试' });
+    }
 
     // 处理并保存行程
     // 先把AI回复加入session.history（确保完整对话被保存到DB）
@@ -145,7 +184,7 @@ router.post('/plan', async (req, res) => {
     session.itinerary = verifiedItinerary;
     session.enhancedPlanning = enhancedPlanning;
     session.status = 'completed';
-    sessions.set(sessionId, session);
+    sessionManager.set(sessionId, session);
 
     res.json({
       code: 200,
@@ -173,70 +212,53 @@ router.post('/chat', async (req, res) => {
 
     if (!message?.trim()) return res.status(400).json({ code: 400, message: '消息不能为空' });
 
+    let session = sessionManager.get(sessionId) || { history: [], requirements: {}, itinerary: [], status: 'chatting' };
+    await loadExistingTrip(session, existingTripId);
+    session.history.push({ role: 'user', content: message });
+
+    // 获取用户ID
     let userId = null;
     const user = await userService.getUserBySession(sessionId);
     if (user) userId = user.userId;
 
-    let session = sessions.get(sessionId) || { history: [], requirements: {}, itinerary: [], status: 'chatting' };
-    await loadExistingTrip(session, existingTripId);
-    session.history.push({ role: 'user', content: message });
-
-    // 获取天气后调用 AI
+    // 获取天气后调用 AI（天气作为上下文传入，同时传userId加载用户偏好）
     const weatherData = await amapService.getWeather();
-    const aiResult = await qwenAIService.generateTripFromNaturalLanguage(message, session.history, weatherData);
-    session.history.push({ role: 'assistant', content: aiResult.message });
+    const aiResult = await qwenAIService.generateTripFromNaturalLanguage(message, session.history, weatherData, userId);
 
-    if (aiResult.ready && aiResult.itinerary?.length > 0) {
-      const verifiedItinerary = await locationVerifyService.verifyItinerary(aiResult.itinerary);
-      session.itinerary = verifiedItinerary;
-      session.requirements = aiResult.requirements;
-
-      // 合并天气
-      if (weatherData?.forecast) {
-        verifiedItinerary.forEach((day, index) => {
-          if (weatherData.forecast[index]) day.weather = weatherData.forecast[index];
-        });
-      }
-
-      // 费用计算
-      const costData = costCalculatorService.calculateTotalCost(verifiedItinerary, aiResult.requirements);
-      const costReport = costCalculatorService.generateCostReport(costData);
-      verifiedItinerary.forEach((day, index) => {
-        if (costData?.dailyCosts[index]) day.dailyCost = costData.dailyCosts[index];
-      });
-
-      // 智能增强
-      const enhancedPlanning = await smartPlanningService.enhanceItinerary(verifiedItinerary, {
-        budget: aiResult.requirements.budget,
-        timeSensitive: true,
-        comfort: aiResult.requirements.crowd === '情侣' || aiResult.requirements.crowd === '家庭'
-      });
-      if (enhancedPlanning.transports) {
-        enhancedPlanning.transports.forEach(dayTransport => {
-          const day = verifiedItinerary.find(d => d.day === dayTransport.day);
-          if (day) day.transports = dayTransport.routes;
-        });
-      }
-
-      // 保存
-      const tripResult = await tripService.createTrip(
-        userId, aiResult.requirements, verifiedItinerary, session.history, [], aiResult.activities || [], sessionId
-      );
-      const tripId = tripResult.tripId;
-      await tripService.saveTripRoutes(tripId, verifiedItinerary);
-
-      sessions.set(sessionId, session);
-      res.json({
-        code: 200,
-        data: { message: aiResult.message, sessionId, tripId, requirements: aiResult.requirements, activities: aiResult.activities || [], itinerary: verifiedItinerary, costData: costReport, ready: true }
-      });
-    } else {
-      sessions.set(sessionId, session);
-      res.json({
+    if (!aiResult.ready || aiResult.error) {
+      session.history.push({ role: 'assistant', content: aiResult.message });
+      sessionManager.set(sessionId, session);
+      return res.json({
         code: 200,
         data: { message: aiResult.message, sessionId, requirements: aiResult.requirements || {}, itinerary: [], ready: false }
       });
     }
+
+    // AI 回复加入历史
+    session.history.push({ role: 'assistant', content: aiResult.message });
+
+    // 复用 processAndSaveItinerary 统一处理（消除重复代码）
+    const { verifiedItinerary, costReport, enhancedPlanning, tripId } = await processAndSaveItinerary(
+      aiResult, session, sessionId, existingTripId, userId
+    );
+
+    // 合并天气数据到每天（chat接口特有的：AI生成时已传入weather，这里再确保覆盖）
+    if (weatherData?.forecast) {
+      verifiedItinerary.forEach((day, index) => {
+        if (weatherData.forecast[index]) day.weather = weatherData.forecast[index];
+      });
+    }
+
+    // 更新 session
+    session.requirements = aiResult.requirements;
+    session.itinerary = verifiedItinerary;
+    session.enhancedPlanning = enhancedPlanning;
+    sessionManager.set(sessionId, session);
+
+    res.json({
+      code: 200,
+      data: { message: aiResult.message, sessionId, tripId, requirements: aiResult.requirements, activities: aiResult.activities || [], itinerary: verifiedItinerary, costData: costReport, enhancedPlanning, ready: true }
+    });
   } catch (error) {
     logger.error(`Chat error: ${error.message}`);
     res.status(500).json({ code: 500, message: error.message || '服务处理失败' });
@@ -289,7 +311,7 @@ router.post('/refresh/hotels', async (req, res) => {
 // 增强规划查询
 router.get('/plan/enhanced/:sessionId', (req, res) => {
   try {
-    const session = sessions.get(req.params.sessionId);
+    const session = sessionManager.get(req.params.sessionId);
     if (!session) return res.status(404).json({ code: 404, message: '会话不存在' });
     res.json({
       code: 200,

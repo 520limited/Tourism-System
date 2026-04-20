@@ -85,7 +85,8 @@ const props = defineProps({
       totalAttractions: 0,
       totalRestaurants: 0,
       crowdTypes: {},
-      monthlyTrips: {}
+      monthlyTrips: {},
+      preferenceProfile: null
     })
   }
 })
@@ -103,7 +104,71 @@ const animatedStats = ref({
 
 const insights = computed(() => {
   const result = []
-  const { totalTrips, favoriteCount, totalAttractions, totalRestaurants, crowdTypes, monthlyTrips } = props.stats
+  const { totalTrips, favoriteCount, totalAttractions, totalRestaurants, crowdTypes, monthlyTrips, preferenceProfile } = props.stats
+  
+  // ========== 偏好画像洞察（最优先展示）==========
+  // 后端 topPreferences 是对象格式: { topAttractionTypes:[], topCuisines:[], ... }
+  const hasPreferenceData = preferenceProfile?.topPreferences &&
+    typeof preferenceProfile.topPreferences === 'object' &&
+    Object.keys(preferenceProfile.topPreferences).length > 0
+
+  if (hasPreferenceData) {
+    const topPrefs = preferenceProfile.topPreferences
+    const confidence = preferenceProfile.confidence || ''
+    const totalBehaviors = preferenceProfile.totalBehaviors || 0
+
+    // 从对象中提取各分类偏好数组（每个元素格式为 { name, score }）
+    const attractionTypes = topPrefs.topAttractionTypes || []
+    const cuisineList = topPrefs.topCuisines || []
+    const regionList = topPrefs.topRegions || []
+
+    // 景点类型偏好
+    if (attractionTypes.length > 0) {
+      const typeNames = { history: '历史文化', nature: '自然风光', modern: '现代都市', leisure: '休闲娱乐', art: '文艺打卡', culture: '人文体验' }
+      const topType = attractionTypes[0]
+      const typeName = typeNames[topType.name] || topType.name
+      result.push(`基于您的浏览行为分析，您偏爱「${typeName}」类景点（热度值 ${Math.round(topType.score)}）`)
+    }
+
+    // 美食偏好
+    if (cuisineList.length > 0) {
+      const topFood = cuisineList[0]
+      result.push(`美食偏好：您对「${topFood.name}」情有独钟（热度值 ${Math.round(topFood.score)}）`)
+    }
+
+    // 区域偏好
+    if (regionList.length > 0) {
+      const topRegion = regionList[0]
+      result.push(`常去区域：「${topRegion.name}」是您的活动中心`)
+    }
+
+    // 置信度评价（字符串: low / medium / high）
+    const confidenceLabels = {
+      high: { text: '画像成熟度：高', desc: `基于 ${totalBehaviors} 次行为学习，推荐结果高度贴合您的口味` },
+      medium: { text: '画像成熟度：中', desc: `已积累 ${totalBehaviors} 次行为数据，继续探索会让推荐更精准` },
+      low: { text: '画像形成中', desc: `已有 ${totalBehaviors} 次行为记录，多收藏、多浏览将让AI更懂你` }
+    }
+    const ci = confidenceLabels[confidence]
+    if (ci) {
+      result.push(`${ci.text} — ${ci.desc}`)
+    }
+
+    // 智能推荐
+    if (attractionTypes.length >= 2) {
+      const typeMap = { history: '岳麓书院/天心阁', nature: '岳麓山/橘子洲', modern: 'IFS国金/五一广场', leisure: '世界之窗/海底世界', art: '谢子龙影像馆/后湖', culture: '省博物馆/简牍博物馆' }
+      const recs = attractionTypes.slice(0, 2).map(t => typeMap[t.name] || t.name).filter(Boolean)
+      if (recs.length > 0) {
+        result.push(`💡 根据您的偏好，下次可以尝试：${recs.join('、')}`)
+      }
+    }
+
+    result.push('') // 空行分隔
+  } else if (totalTrips > 0) {
+    result.push('💡 小贴士：完善偏好设置并多使用系统，AI会学习您的口味生成专属推荐')
+    result.push('')
+  }
+  
+  // ========== 原有统计数据洞察 ==========
   
   const greetings = ['您好，旅行家！', '欢迎回来，探索者！', '嗨，旅行达人！', '你好，冒险家！']
   const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)]

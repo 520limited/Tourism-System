@@ -481,39 +481,6 @@ class DynamicPopularityService {
       logger.error(`缓存热度画像失败: ${error.message}`);
     }
   }
-
-  async batchUpdateProfiles(attractions) {
-    const results = [];
-    
-    for (const attraction of attractions) {
-      const profile = await this.getAttractionProfile(attraction.name, attraction);
-      results.push({
-        name: attraction.name,
-        profile
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-    
-    return results;
-  }
-
-  async getProfilesStats() {
-    try {
-      const rows = await dbAll('SELECT * FROM attraction_popularity');
-      return {
-        total: rows.length,
-        bySource: rows.reduce((acc, row) => {
-          const data = JSON.parse(row.popularity_data || '{}');
-          const source = data.source || 'unknown';
-          acc[source] = (acc[source] || 0) + 1;
-          return acc;
-        }, {})
-      };
-    } catch (error) {
-      return { total: 0, bySource: {} };
-    }
-  }
 }
 
 module.exports = new DynamicPopularityService();

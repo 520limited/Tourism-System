@@ -24,8 +24,7 @@
         
         <el-select v-model="statusFilter" placeholder="状态筛选" clearable style="width: 150px" @change="loadTrips">
           <el-option label="全部" value="" />
-          <el-option label="草稿" value="draft" />
-          <el-option label="已完成" value="completed" />
+          <el-option label="已收藏" value="favorited" />
         </el-select>
         
         <el-button type="primary" @click="loadTrips">
@@ -62,6 +61,10 @@
           </div>
 
           <div class="card-actions" @click.stop>
+            <el-button :type="trip.isFavorite ? 'danger' : 'default'" text size="small" @click.stop="toggleTripFavorite(trip)">
+              <el-icon><Star /></el-icon>
+              {{ trip.isFavorite ? '已收藏' : '收藏' }}
+            </el-button>
             <el-button text type="primary" size="small" @click="openTrip(trip.tripId)">
               <el-icon><View /></el-icon>
               查看
@@ -95,7 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Search, MapLocation, View, Delete, Edit } from '@element-plus/icons-vue'
+import { ArrowLeft, Search, MapLocation, View, Delete, Edit, Star } from '@element-plus/icons-vue'
 import { tripAPI } from '../api'
 import { useTripStore } from '../stores/trip'
 
@@ -116,12 +119,16 @@ const goBack = () => {
 const loadTrips = async () => {
   loading.value = true
   try {
-    const res = await tripAPI.getTrips({
-      page: currentPage.value,
-      pageSize: pageSize.value,
-      keyword: keyword.value,
-      status: statusFilter.value
-    })
+    const params = { page: currentPage.value, pageSize: pageSize.value }
+    if (keyword.value) params.keyword = keyword.value
+    // 收藏筛选：传给后端 isFavorite 参数
+    if (statusFilter.value === 'favorited') {
+      params.isFavorite = true
+    } else if (statusFilter.value) {
+      params.status = statusFilter.value
+    }
+
+    const res = await tripAPI.getTrips(params)
     
     if (res.code === 200) {
       if (Array.isArray(res.data)) {
@@ -146,6 +153,27 @@ const openTrip = (tripId) => {
 
 const editTrip = (tripId) => {
   router.push(`/?tripId=${tripId}`)
+}
+
+const toggleTripFavorite = async (trip) => {
+  try {
+    const sessionId = localStorage.getItem('sessionId')
+    const res = await fetch(`/api/trips/${trip.tripId}/favorite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId || '' },
+      body: JSON.stringify({ isFavorite: !trip.isFavorite })
+    }).then(r => r.json())
+
+    if (res.code === 200) {
+      trip.isFavorite = !trip.isFavorite
+      ElMessage.success(trip.isFavorite ? '已收藏行程' : '已取消收藏')
+    } else {
+      ElMessage.error(res.message || '操作失败')
+    }
+  } catch (error) {
+    console.error('收藏行程失败:', error)
+    ElMessage.error('收藏失败')
+  }
 }
 
 const confirmDelete = async (trip) => {
