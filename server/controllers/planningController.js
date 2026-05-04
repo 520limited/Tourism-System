@@ -108,6 +108,7 @@ const getSession = (id) => sessionManager.get(id);
  * @param {string|null} userId - 当前用户ID(未登录时为null)
  * @returns {Promise<{verifiedItinerary, costReport, enhancedPlanning, tripId}>}
  */
+async function processAndSaveItinerary(aiResult, session, sessionId, existingTripId, userId) {
   const hotelArea = aiResult.requirements.hotelArea || '五一广场';
   const hotelBudget = aiResult.requirements.budget || '500-1000';
 
@@ -186,6 +187,7 @@ const getSession = (id) => sessionManager.get(id);
  * @param {Object} session - 当前会话对象(将被填充历史数据)
  * @param {string|null} existingTripId - 已有行程ID
  */
+async function loadExistingTrip(session, existingTripId) {
   if (!existingTripId) return;
   const existingTrip = await tripService.getTripById(existingTripId);
   if (existingTrip) {

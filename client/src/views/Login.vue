@@ -180,6 +180,7 @@ const registerForm = reactive({
  * 流程: 校验邮箱格式 → 调用API → 成功后启动60秒倒计时
  * 防重复: 倒计时期间禁用按钮
  */
+const sendCode = async () => {
   if (!registerForm.email) {
     ElMessage.warning('请先输入邮箱')
     return
@@ -220,6 +221,7 @@ const registerForm = reactive({
  * 完整流程: 表单校验 → 调用login API → 存储sessionId到localStorage
  *           → 更新Pinia用户状态 → 跳转(优先回到原页面或首页)
  */
+const handleLogin = async () => {
   if (!loginFormRef.value) return
   
   await loginFormRef.value.validate(async (valid) => {
@@ -254,6 +256,7 @@ const registerForm = reactive({
  * 流程: 表单校验(含验证码+密码一致性) → 调用register API
  *       成功后自动切换到登录Tab并预填邮箱
  */
+const handleRegister = async () => {
   if (!registerFormRef.value) return
   
   await registerFormRef.value.validate(async (valid) => {

@@ -60,6 +60,7 @@ class PreferenceLearningService {
    * 
    * 执行流程: 写入user_behaviors表 → 加权更新preference_profiles表
    */
+  async recordBehavior(behavior) {
     const { type, itemType, itemData, context } = behavior;
     const behaviorId = `bh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -99,6 +100,7 @@ class PreferenceLearningService {
    * 
    * 每次调用后立即持久化到数据库,保证实时性
    */
+  async updatePreferenceProfile(userId, behavior) {
     try {
       let profile = await this.getUserProfile(userId);
       if (!profile) {
@@ -361,6 +363,7 @@ class PreferenceLearningService {
    * 
    * 此文本直接拼接至qwenAIService的systemPrompt,影响AI推荐决策
    */
+  async generatePreferencePrompt(userId) {
     try {
       const profile = await this.getUserProfile(userId);
       if (!profile) {

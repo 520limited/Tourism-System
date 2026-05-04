@@ -35,9 +35,6 @@
 const { dbRun, dbGet, dbAll } = require('../../database/db');
 const logger = require('../logger');
 const dynamicPopularityService = require('./dynamicPopularityService');
-const { dbRun, dbGet, dbAll } = require('../../database/db');
-const logger = require('../logger');
-const dynamicPopularityService = require('./dynamicPopularityService');
 
 const defaultProfiles = {
   '橘子洲': {
@@ -191,6 +188,7 @@ class PopularityPredictionService {
    * 
    * 最终值裁剪到 [0.1, 1.0] 并映射为5级状态标签+颜色编码
    */
+  predictCrowdLevel(attractionName, date, hour, attractionData = null) {
     const profile = this.findAttractionProfileSync(attractionName, attractionData);
     if (!profile) {
       return this.getDefaultPrediction(date, hour);
@@ -352,6 +350,7 @@ class PopularityPredictionService {
    * 
    * 结果四舍五入到5分钟整数倍,返回区间估计[min,max]
    */
+  estimateVisitDuration(attractionName, options = {}) {
     const { crowdLevel = 0.5, groupType = 'couple', withKids = false, withElderly = false } = options;
     
     const profile = this.findAttractionProfileSync(attractionName);
@@ -502,6 +501,7 @@ class PopularityPredictionService {
    * 约束: 高峰时段(level>0.8)自动排除;每个景点占用连续时间段
    * 复杂度: O(N² × T), N=景点数, T=时隙数
    */
+  optimizeScheduleForCrowd(attractions, date, preferences = {}) {
     const { earliestHour = 8, latestHour = 20, avoidHighCrowd = true } = preferences;
     
     const timeSlots = [];
@@ -574,6 +574,7 @@ class PopularityPredictionService {
    * 将数值化的拥挤度预测转换为自然语言描述,
    * 注入AI提示词中让模型在生成行程时自动避开高峰时段
    */
+  generateCrowdPrompt(attractions, date) {
     const dateInfo = this.analyzeDate(date);
     let prompt = '\n【热度预测信息】';
 

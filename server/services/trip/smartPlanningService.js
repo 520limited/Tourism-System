@@ -65,6 +65,7 @@ class SmartPlanningService {
    * @param {Object|null} startPoint - 指定起点坐标(可选)
    * @returns {{ route:Array, savedDistance:number, savedTime:number }}
    */
+  optimizeRoute(attractions, startPoint = null) {
     if (!attractions || attractions.length <= 1) return attractions;
 
     logger.info(`开始优化路线，共${attractions.length}个景点`);
@@ -114,6 +115,7 @@ class SmartPlanningService {
    * 计算地球上两点间的大圆弧距离(非欧氏直线距离)
    * @returns {number} 距离(米), 缺坐标时返回Infinity(排序时排最后)
    */
+  calculateDistance(point1, point2) {
     if (!point1?.latitude || !point1?.longitude || !point2?.latitude || !point2?.longitude) {
       return Infinity;
     }
@@ -169,6 +171,7 @@ class SmartPlanningService {
    * @param {Object} preferences - 用户偏好{budget/weather/hasLuggage/timeSensitive/comfort}
    * @returns {Array} 排序后的推荐列表
    */
+  async recommendTransportation(from, to, preferences = {}) {
     const distance = this.calculateDistance(from, to);
     const weather = preferences.weather || 'sunny';
     const hasLuggage = preferences.hasLuggage || false;
@@ -315,6 +318,7 @@ class SmartPlanningService {
    * @param {Object} preferences - {budget, timeSensitive, comfort}
    * @returns {{ transports[], optimizations[], tips[], budgetOptimization? }}
    */
+  async enhanceItinerary(itinerary, preferences = {}) {
     logger.info('开始增强行程规划...');
 
     const enhanced = {

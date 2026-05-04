@@ -63,6 +63,7 @@ class ConcurrencyLimiter {
    * 所有外部API调用都应通过此方法包装,实现自动限流。
    * 内部队列机制: 任务按序入队,_process()循环消费
    */
+  execute(fn) {
     return new Promise((resolve, reject) => {
       this.queue.push({ fn, resolve, reject });
       this._process();
@@ -79,6 +80,7 @@ class ConcurrencyLimiter {
    *   4. 最小间隔未满足? → 延迟到满足为止
    *   5. 全部通过 → 出队执行
    */
+  _process() {
     if (this.queue.length === 0) return;
 
     if (this.running >= this.maxConcurrent) return;
@@ -219,6 +221,7 @@ class AmapService {
    * 
    * 并发策略: 所有搜索任务同时发起,由ConcurrencyLimiter控制实际执行速率
    */
+  async batchSearchPOIs(names, types, limit, label, filterFn) {
     if (!names || names.length === 0) return [];
 
     const results = [];

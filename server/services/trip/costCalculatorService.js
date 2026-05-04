@@ -160,6 +160,7 @@ class CostCalculatorService {
    * 遍历每天行程,调用calculateDailyCost获取分日费用,
    * 汇总生成: dailyCosts[] + summary{total/perPerson/perDay}
    */
+  calculateTotalCost(itinerary, requirements) {
     if (!itinerary || itinerary.length === 0) {
       return null;
     }
