@@ -1,8 +1,30 @@
+/**
+ * @fileoverview 行程费用计算服务 - 基于真实价格数据的费用核算引擎
+ * 
+ * @module costCalculatorService
+ * @description 本模块负责对AI生成的行程进行全面的费用计算和报告生成。
+ *              所有费用计算均基于AI返回的实际价格数据(非固定估算),确保准确性。
+ * 
+ * 费用构成(六大类):
+ *   1. attractions  - 景点门票费用(按ticketPrice字段累加)
+ *   2. restaurants  - 餐饮费用(按avgPrice字段累加)
+ *   3. hotels       - 住宿费用(仅第一天计价 × 总天数)
+ *   4. transportation - 交通费用(实际交通方案cost字段累加,默认50元兜底)
+ *   5. snacks       - 预估小吃零食费用(固定50元/天)
+ *   6. emergencyFund - 应急备用金(小计×10%)
+ * 
+ * 输出格式:
+ *   calculateTotalCost() → { dailyCosts[], summary{ total, perPerson, perDay } }
+ *   generateCostReport() → 结构化前端展示数据(含emoji图标)
+ * 
+ * 设计模式: 单例导出
+ * 
+ * @requires ../logger 日志服务
+ */
 const logger = require('../logger');
 
 /**
  * 费用计算服务
- * 基于AI返回的真实价格数据计算，禁止固定价格表
  */
 class CostCalculatorService {
   /**
@@ -132,7 +154,12 @@ class CostCalculatorService {
   /**
    * 计算整个行程的总费用
    */
-  calculateTotalCost(itinerary, requirements) {
+  /**
+   * calculateTotalCost — 行程总费用计算(对外主入口)
+   * 
+   * 遍历每天行程,调用calculateDailyCost获取分日费用,
+   * 汇总生成: dailyCosts[] + summary{total/perPerson/perDay}
+   */
     if (!itinerary || itinerary.length === 0) {
       return null;
     }

@@ -1,10 +1,26 @@
 /**
- * 数据库重置脚本
+ * @fileoverview 数据库重置与初始化脚本
  * 
- * 用法: node server/database/reset-db.js
+ * @module reset-db
+ * @description 本脚本用于开发/部署阶段快速重建数据库。执行流程:
+ *              1. 连接MySQL数据库(从.env读取连接参数)
+ *              2. 关闭外键检查(允许任意顺序删除表)
+ *              3. 按依赖顺序逐个DROP所有业务表(子表先删避免外键冲突)
+ *              4. 调用db.js的initDatabase()重新建表(含完整索引和迁移逻辑)
+ *              5. 输出重建结果验证信息
  * 
- * 功能: 删除所有表 → 重新创建（含完整索引和迁移）
- * 注意: 此操作会丢失所有现有数据，请确认后执行！
+ * 使用方法:
+ *   node server/database/reset-db.js
+ * 
+ * 数据表列表(按外键依赖顺序):
+ *   shared_trips → trip_routes → favorites → user_behaviors → user_preference_profiles
+ *   → attraction_popularity → trips → sessions → users
+ * 
+ * 注意事项: 此操作会清除所有数据,请勿在生产环境随意执行!
+ * 
+ * @requires mysql2/promise MySQL异步驱动
+ * @requires dotenv 环境变量加载
+ * @requires ./db 数据库初始化模块
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });

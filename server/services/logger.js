@@ -1,3 +1,30 @@
+/**
+ * @fileoverview 异步日志服务 - 基于WriteStream的高性能缓冲日志系统
+ * 
+ * @module logger
+ * @description 本模块实现了生产级异步日志方案,解决fs.appendFileSync同步写阻塞Node.js事件循环的问题。
+ *              采用缓冲区批处理策略减少IO次数,按日期自动分文件存储。
+ * 
+ * 核心设计:
+ *   - WriteStream替代appendFileSync: 异步写入不阻塞主线程
+ *   - 64KB缓冲区批量刷盘: 积累足够数据后一次性写入减少IO调用
+ *   - setImmediate微任务调度: 在当前事件循环tick结束后异步刷出
+ *   - 按日期分文件: logs/YYYY-MM-DD-app.log,便于归档和清理
+ *   - 流自动清理: 保留最近2天的流句柄,防止文件描述符泄漏
+ *   - 同步兜底机制: 缓冲区溢出时降级为sync写入保证数据安全
+ * 
+ * 五个日志级别:
+ *   info()  - 一般信息(始终输出)
+ *   warn()  - 警告信息(始终输出)
+ *   error() - 错误信息(始终输出)
+ *   debug() - 调试信息(仅NODE_ENV=development时输出)
+ *   http()  - HTTP请求(预留)
+ * 
+ * 使用方式: 全局单例 const logger = require('./logger'); logger.info('message');
+ * 
+ * @requires fs Node.js文件系统模块
+ * @requires path 路径处理模块
+ */
 const fs = require('fs');
 const path = require('path');
 
@@ -57,7 +84,6 @@ class Logger {
       if (this._bufferSize >= this._maxBufferSize) {
         this._flushSync(); // 缓冲区满时同步刷出（极少发生）
       } else if (!this._flushing) {
-        // 使用 setImmediate 在当前事件循环tick后异步写入，不阻塞主流程
         this._flushing = true;
         setImmediate(() => this._flush());
       }

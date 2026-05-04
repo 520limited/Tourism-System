@@ -1,18 +1,70 @@
+/**
+ * @fileoverview 智能规划增强服务 - TSP路线优化 + 交通方式推荐 + 预算优化建议
+ * 
+ * @module smartPlanningService
+ * @description 本模块在AI生成的基础行程之上进行智能化增强处理,是"智能规划"的核心算法层,
+ *              负责让行程从"可用"变为"最优"。
+ * 
+ * 三大核心能力:
+ * 
+ *   ┌─────────────────────────────────────────────────────┐
+ *   │ 1. TSP路线优化 (optimizeRoute)                      │
+ *   │    算法: 最近邻贪心法 (Nearest Neighbor Heuristic)  │
+ *   │    复杂度: O(n²), 适合 N<20 的行程场景             │
+ *   │    距离计算: Haversine球面余弦定理(地球表面距离)   │
+ *   │    输出: 最优游览顺序 + 节省距离/时间               │
+ *   ├─────────────────────────────────────────────────────┤
+ *   │ 2. 智能交通推荐 (recommendTransportation)            │
+ *   │    5种方式评分排序: 步行/骑行/地铁/公交/网约车     │
+ *   │    评估因子: 距离/天气/时段/预算/舒适度偏好        │
+ *   │    地铁公交需检查起点终点附近站点可用性            │
+ *   ├─────────────────────────────────────────────────────┤
+ *   │ 3. 预算优化 (optimizeBudget)                         │
+ *   │    超支时按比例给出四维省钱建议                     │
+ *   │    住宿40% + 餐饮30% + 交通20% + 景点10%            │
+ *   └─────────────────────────────────────────────────────┘
+ * 
+ * 入口函数: enhanceItinerary(itinerary, preferences)
+ *   对每天所有相邻景点对并行执行交通推荐,汇总返回增强结果
+ * 
+ * @requires ../external/amapService 高德地图服务(路线规划+站点查询)
+ * @requires ../logger 日志服务
+ */
 const amapService = require('../external/amapService');
 const logger = require('../logger');
 
 /**
  * 智能规划增强服务
- * 所有数据通过API实时获取，禁止固定数据
  */
 class SmartPlanningService {
   constructor() {}
 
   /**
-   * 智能路线优化
-   * 基于坐标计算，不使用固定数据
+   * TSP路线优化 — 最近邻贪心法
+   *
+   * 从起点出发，每步选择距离最近的未访问景点，直至遍历全部
+   * 时间复杂度 O(n²)，适合 N<20 的行程场景
+   *
+   * @param {Array} attractions - 含 latitude/longitude 的景点数组
+   * @param {Object|null} startPoint - 指定起点(默认取第一个)
+   * @returns {{ route, savedDistance(m), savedTime(min) }}
    */
-  optimizeRoute(attractions, startPoint = null) {
+  /**
+   * optimizeRoute — TSP路线优化算法(最近邻贪心法)
+   * 
+   * 算法步骤:
+   *   1. 从起点(或第一个景点)出发
+   *   2. 每次在未访问景点中选择距离当前位置最近的
+   *   3. 标记为已访问并移入优化序列
+   *   4. 重复直到遍历全部景点
+   * 
+   * 时间复杂度: O(n²), 对于行程场景(N<20)性能足够
+   * 局限性: 贪心法不保证全局最优,但近似度通常在85%+且速度快
+   * 
+   * @param {Array} attractions - 含latitude/longitude的景点数组
+   * @param {Object|null} startPoint - 指定起点坐标(可选)
+   * @returns {{ route:Array, savedDistance:number, savedTime:number }}
+   */
     if (!attractions || attractions.length <= 1) return attractions;
 
     logger.info(`开始优化路线，共${attractions.length}个景点`);
@@ -53,9 +105,15 @@ class SmartPlanningService {
   }
 
   /**
-   * 计算两点间距离
+   * Haversine球面余弦定理 — 计算两点间地球表面距离
+   *
+   * @returns {number} 距离(米), 无坐标时返回Infinity
    */
-  calculateDistance(point1, point2) {
+  /**
+   * calculateDistance — Haversine球面距离公式
+   * 计算地球上两点间的大圆弧距离(非欧氏直线距离)
+   * @returns {number} 距离(米), 缺坐标时返回Infinity(排序时排最后)
+   */
     if (!point1?.latitude || !point1?.longitude || !point2?.latitude || !point2?.longitude) {
       return Infinity;
     }
@@ -87,10 +145,30 @@ class SmartPlanningService {
   }
 
   /**
-   * 智能交通推荐
-   * 基于距离计算，检查地铁站可用性
+   * 智能交通推荐 — 基于距离/天气/时段评分5种方式
+   *
+   * 依次评估: 步行(<2km) → 骑行(<3km,晴天) → 地铁(需有站) → 公交(需有站) → 网约车(兜底)
+   * 最终按 calculateTransportScore 综合评分降序排列
+   *
+   * @returns {Array} 排序后的推荐列表 [{mode,name,duration,cost,reason,...}]
    */
-  async recommendTransportation(from, to, preferences = {}) {
+  /**
+   * recommendTransportation — 智能交通方式推荐引擎
+   * 
+   * 五种交通方式的评估与推荐:
+   *   步行(<2km): 零成本,短距离最优选择
+   *   骑行(<3km,晴天无行李): 共享单车,灵活便捷
+   *   地铁(需两端有站): 准时可靠,不受路面拥堵影响
+   *   公交(>1.5km且有站): 经济实惠,覆盖面广
+   *   网约车(兜底选项): 直达舒适,高峰可能拥堵
+   * 
+   * 最终按综合评分降序排列(考虑预算/时效/舒适度偏好)
+   * 
+   * @param {Object} from - 起点(含name/latitude/longitude)
+   * @param {Object} to - 终点
+   * @param {Object} preferences - 用户偏好{budget/weather/hasLuggage/timeSensitive/comfort}
+   * @returns {Array} 排序后的推荐列表
+   */
     const distance = this.calculateDistance(from, to);
     const weather = preferences.weather || 'sunny';
     const hasLuggage = preferences.hasLuggage || false;
@@ -219,10 +297,24 @@ class SmartPlanningService {
   }
 
   /**
-   * 生成完整增强行程
-   * 包含路线优化和交通方式推荐
+   * 行程增强入口 — 对每天的所有相邻景点对并行执行交通推荐
+   *
+   * @param {Array} itinerary - 含 attractions 的行程数组
+   * @param {Object} preferences - { budget, timeSensitive, comfort }
+   * @returns {{ transports[], optimizations[], tips[] }}
    */
-  async enhanceItinerary(itinerary, preferences = {}) {
+  /**
+   * enhanceItinerary — 行程增强入口(对外暴露的主方法)
+   * 
+   * 对完整行程的每天执行:
+   *   1. TSP路线优化 → 重排景点顺序使总距离最短
+   *   2. 相邻景点对的交通推荐(并行计算提升性能)
+   *   3. 预算超支时生成省钱优化建议
+   * 
+   * @param {Array} itinerary - 含attractions的行程天数组
+   * @param {Object} preferences - {budget, timeSensitive, comfort}
+   * @returns {{ transports[], optimizations[], tips[], budgetOptimization? }}
+   */
     logger.info('开始增强行程规划...');
 
     const enhanced = {

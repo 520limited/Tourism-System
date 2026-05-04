@@ -1,13 +1,52 @@
+/**
+ * @fileoverview 高德地图API服务封装 - POI搜索/路线规划/天气查询/周边站点
+ * 
+ * @module amapService
+ * @description 本模块是对高德地图开放平台REST API的完整封装,是系统获取真实地理数据的
+ *              核心外部服务层。所有API调用均经过并发限速器保护以符合高德QPS限制。
+ * 
+ * 主要功能分类:
+ *   1. POI搜索: 文本搜索/批量搜索(景点/餐厅/酒店/小吃/饮品/打卡点)
+ *   2. 路线规划: 步行/驾车/公交三种交通方式的路径计算
+ *   3. 天气服务: 实况天气 + 4日预报(并行请求)
+ *   4. 周边查询: 地铁站/公交站的半径搜索及可用性判断
+ * 
+ * 性能优化核心 — ConcurrencyLimiter 并发限速器(令牌桶+滑动窗口混合模型):
+ *   - maxConcurrent=5  同时运行的最大异步数(防并发过载)
+ *   - maxQPS=8        每秒最大请求数(满足高德API限制)
+ *   - minInterval=120ms 相邻两次请求最小间隔(防突发)
+ *   - maxRetries=3    最大重试次数 + 指数退避(800/1600/2400ms)
+ * 
+ * 设计模式: 单例导出(module.exports = new AmapService()),全局共享一个实例
+ * 
+ * @requires axios HTTP客户端
+ * @requires ../logger 日志服务
+ * @requires dotenv 环境变量(AMAP_KEY)
+ */
 const axios = require('axios');
 const logger = require('../logger');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '..', '.env') });
 
 /**
- * 并发限速器 - 精确控制 QPS
- * 保证每秒最多 maxRequests 次请求，同时最小间隔 minInterval ms
+ * 并发限速器 — 令牌桶+滑动窗口混合模型
+ *
+ * 三重限制:
+ *   1. maxConcurrent: 同时运行的最大异步数(防并发过载)
+ *   2. maxQPS: 每秒最大请求数(满足高德API限制)
+ *   3. minInterval: 相邻两次请求最小间隔(防突发)
+ *
+ * 内部队列: 所有 execute(fn) 调用按序排队，_process() 循环消费
  */
 class ConcurrencyLimiter {
+  /**
+   * 并发限速器构造函数 — 初始化三重限制参数
+   * 
+   * 令牌桶 + 滑动窗口混合模型:
+   *   - 并发数限制: 防止同时发起过多请求压垮服务器
+   *   - QPS限制: 满足高德API的每秒调用次数配额
+   *   - 最小间隔: 防止突发流量穿透QPS窗口
+   */
   constructor(maxConcurrent = 5, maxRequestsPerSecond = 8, minInterval = 120) {
     this.maxConcurrent = maxConcurrent;
     this.maxRequestsPerSecond = maxRequestsPerSecond;
@@ -19,14 +58,27 @@ class ConcurrencyLimiter {
     this.windowStart = Date.now();
   }
 
-  execute(fn) {
+  /**
+   * execute — 将异步任务加入限速队列并执行
+   * 所有外部API调用都应通过此方法包装,实现自动限流。
+   * 内部队列机制: 任务按序入队,_process()循环消费
+   */
     return new Promise((resolve, reject) => {
       this.queue.push({ fn, resolve, reject });
       this._process();
     });
   }
 
-  _process() {
+  /**
+   * _process — 队列消费循环(核心调度逻辑)
+   * 
+   * 三重检查顺序:
+   *   1. 队列空? → 直接返回
+   *   2. 达到最大并发? → 等待任务完成回调触发
+   *   3. QPS窗口满? → 计算等待时间后延迟重试
+   *   4. 最小间隔未满足? → 延迟到满足为止
+   *   5. 全部通过 → 出队执行
+   */
     if (this.queue.length === 0) return;
 
     if (this.running >= this.maxConcurrent) return;
@@ -86,6 +138,13 @@ class AmapService {
 
   // ==================== 基础 POI 搜索 ====================
 
+  /**
+   * 高德POI文本搜索 (带重试+限流)
+   *
+   * @param {string} keywords - 搜索关键词(景点名/餐厅名等)
+   * @param {string} types - 高德POI类型编码(如'风景名胜'|'餐饮服务')
+   * @returns {Array} 格式化后的POI列表 [{name,address,latitude,longitude,tel,...}]
+   */
   async searchPOI(keywords, types = '', page = 1, offset = 20) {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
@@ -145,9 +204,21 @@ class AmapService {
   // 替代原来6个完全重复的方法，性能提升：串行→并发（受控）
 
   /**
-   * 统一批量搜索POI（带并发控制和类型过滤）
+   * 统一批量搜索入口 — N个地点名 → 并行搜索 + limiter控制速率
+   *
+   * @param {Array} names - 待搜索的地点名称数组
+   * @param {string} label - 日志标签(如"景点"/"餐厅")
+   * @param {string} types - 高德POI类型编码
+   * @returns {Array} 与输入同序的结果数组
    */
-  async batchSearchPOIs(names, label, types = '', filterFn = null, limit = Infinity) {
+  /**
+   * batchSearchPOIs — 统一批量搜索入口(消除6个重复方法的代码冗余)
+   * 
+   * 设计改进: 原来每个类型(景点/餐厅/酒店...)都有几乎相同的批量搜索逻辑,
+   *           现在统一委托到此方法,通过参数差异化,减少约200行重复代码。
+   * 
+   * 并发策略: 所有搜索任务同时发起,由ConcurrencyLimiter控制实际执行速率
+   */
     if (!names || names.length === 0) return [];
 
     const results = [];
@@ -324,6 +395,11 @@ class AmapService {
 
   // ==================== 天气 ====================
 
+  /**
+   * 获取长沙天气 — 实况+4日预报(并行请求)
+   *
+   * @returns {{ current:{temp,weather,...}, forecast:[{date,high,low,...}] }}
+   */
   async getWeather() {
     try {
       const cityCode = '430100';
