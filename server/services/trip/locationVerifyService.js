@@ -100,7 +100,13 @@ class LocationVerifyService {
       }
       
       if (pois && pois.length > 0) {
-        const matchedPoi = this.findBestMatch(pois, location.name);
+        const matchedPoi = this.findBestMatch(pois, location.name, location.latitude, location.longitude);
+        
+        // 高德结果不可信（坐标偏差过大），使用AI坐标
+        if (!matchedPoi) {
+          logger.warn(`[高德验证被拒绝] ${typeName}: ${location.name}, 使用AI坐标 (${location.latitude}, ${location.longitude})`);
+          return { ...location, source: 'amap_rejected' };
+        }
         
         const aiCoord = `(${location.latitude}, ${location.longitude})`;
         const amapCoord = `(${matchedPoi.latitude}, ${matchedPoi.longitude})`;
@@ -161,20 +167,47 @@ class LocationVerifyService {
   }
 
   /**
-   * 找到最佳匹配的POI
+   * 找到最佳匹配的POI（增加距离校验，避免匹配到外省）
    */
-  findBestMatch(pois, targetName) {
+  findBestMatch(pois, targetName, aiLatitude = null, aiLongitude = null) {
     // 优先选择名称完全匹配的
-    const exactMatch = pois.find(poi => 
-      poi.name === targetName || 
-      poi.name.includes(targetName) || 
+    const exactMatch = pois.find(poi =>
+      poi.name === targetName ||
+      poi.name.includes(targetName) ||
       targetName.includes(poi.name)
     );
-    
-    if (exactMatch) return exactMatch;
-    
-    // 如果没有完全匹配，返回第一个结果
-    return pois[0];
+
+    const candidate = exactMatch || pois[0];
+    if (!candidate) return null;
+
+    // 距离校验：如果AI坐标与高德坐标差距过大（>30km），说明搜索结果不可信，拒绝使用
+    if (aiLatitude != null && aiLongitude != null) {
+      const distance = this.calculateDistance(
+        { latitude: aiLatitude, longitude: aiLongitude },
+        { latitude: candidate.latitude, longitude: candidate.longitude }
+      );
+      if (distance > 30000) {
+        logger.warn(`坐标偏差过大 (${Math.round(distance)}m > 30km), 拒绝高德结果: ${targetName} → ${candidate.name}`);
+        return null;
+      }
+    }
+
+    return candidate;
+  }
+
+  /** Haversine公式计算两点距离(米) */
+  calculateDistance(a, b) {
+    if (!a?.latitude || !a?.longitude || !b?.latitude || !b?.longitude) return Infinity;
+    const R = 6371000;
+    const rad = Math.PI / 180;
+    const dLat = (b.latitude - a.latitude) * rad;
+    const dLng = (b.longitude - a.longitude) * rad;
+    const sinLat = Math.sin(dLat / 2);
+    const sinLng = Math.sin(dLng / 2);
+    const cosLat1 = Math.cos(a.latitude * rad);
+    const cosLat2 = Math.cos(b.latitude * rad);
+    const A = sinLat * sinLat + cosLat1 * cosLat2 * sinLng * sinLng;
+    return R * 2 * Math.atan2(Math.sqrt(A), Math.sqrt(1 - A));
   }
 }
 

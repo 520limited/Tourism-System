@@ -60,7 +60,7 @@ class PreferenceLearningService {
    * 
    * 执行流程: 写入user_behaviors表 → 加权更新preference_profiles表
    */
-  async recordBehavior(behavior) {
+  async recordBehavior(userId, behavior) {
     const { type, itemType, itemData, context } = behavior;
     const behaviorId = `bh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
