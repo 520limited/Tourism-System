@@ -1,14 +1,4 @@
 <template>
-    - 注册功能: 邮箱验证码(60s倒计时) + 密码确认 → 创建账户 → 自动切换到登录Tab
-    - 表单校验: 自定义validator实现邮箱格式、密码长度、确认密码一致性校验
-    - 游客模式: 无需任何认证直接进入主页
-  
-  UI框架: Element Plus (el-tabs/el-form/el-input/el-button)
-  
-  状态管理: Pinia (useUserStore) 持久化用户信息
-  
-  API依赖: userAPI (sendCode/login/register)
--->
   <div class="login-page">
     <div class="login-container">
       <div class="left-section">
